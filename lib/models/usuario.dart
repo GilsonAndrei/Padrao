@@ -1,21 +1,18 @@
-// models/usuario.dart
 import 'package:projeto_padrao/enums/permissao_usuario.dart';
 import 'package:projeto_padrao/models/perfil_usuario.dart';
-import 'package:projeto_padrao/models/base_model.dart';
 
-class Usuario extends BaseModel {
-  @override
-  String id;
-  String nome;
-  String email;
-  String? telefone;
-  String? fotoUrl;
-  PerfilUsuario perfil;
-  DateTime dataCriacao;
-  DateTime? dataAtualizacao;
-  DateTime? ultimoAcesso;
-  bool ativo;
-  bool emailVerificado;
+class Usuario {
+  final String id;
+  final String nome;
+  final String email;
+  final String? telefone;
+  final String? fotoUrl;
+  final PerfilUsuario perfil;
+  final DateTime dataCriacao;
+  final DateTime? dataAtualizacao;
+  final DateTime? ultimoAcesso;
+  final bool ativo;
+  final bool emailVerificado;
 
   Usuario({
     required this.id,
@@ -32,49 +29,31 @@ class Usuario extends BaseModel {
   });
 
   // Converte para Map
-  @override
   Map<String, dynamic> toMap() {
     return {
+      'id': id,
       'nome': nome,
       'email': email,
       'telefone': telefone,
       'fotoUrl': fotoUrl,
-      'perfilId': perfil.id,
+      'perfil': perfil.toMap(),
       'dataCriacao': dataCriacao.millisecondsSinceEpoch,
       'dataAtualizacao': dataAtualizacao?.millisecondsSinceEpoch,
       'ultimoAcesso': ultimoAcesso?.millisecondsSinceEpoch,
       'ativo': ativo,
       'emailVerificado': emailVerificado,
-      'searchable': _createSearchableFields(),
     };
   }
 
-  List<String> _createSearchableFields() {
-    List<String> searchable = [nome.toLowerCase(), email.toLowerCase()];
-
-    if (telefone != null) {
-      searchable.add(telefone!.toLowerCase());
-    }
-
-    return searchable;
-  }
-
-  // MÉTODO CORRIGIDO: Agora é um factory constructor
-  factory Usuario.fromMap(Map<String, dynamic> map, String id) {
+  // Cria a partir de um Map
+  factory Usuario.fromMap(Map<String, dynamic> map) {
     return Usuario(
-      id: id,
+      id: map['id'] ?? '',
       nome: map['nome'] ?? '',
       email: map['email'] ?? '',
       telefone: map['telefone'],
       fotoUrl: map['fotoUrl'],
-      perfil: PerfilUsuario(
-        id: map['perfilId'] ?? '',
-        nome: '',
-        descricao: '',
-        permissoes: [],
-        dataCriacao: DateTime.now(),
-        ativo: true,
-      ), // Será carregado depois
+      perfil: PerfilUsuario.fromMap(Map<String, dynamic>.from(map['perfil'])),
       dataCriacao: DateTime.fromMillisecondsSinceEpoch(map['dataCriacao']),
       dataAtualizacao: map['dataAtualizacao'] != null
           ? DateTime.fromMillisecondsSinceEpoch(map['dataAtualizacao'])
@@ -86,8 +65,6 @@ class Usuario extends BaseModel {
       emailVerificado: map['emailVerificado'] ?? false,
     );
   }
-
-  // REMOVA o método fromMap antigo (o void) e mantenha apenas este:
 
   // Cria uma cópia do usuário com possíveis alterações
   Usuario copyWith({
@@ -117,6 +94,4 @@ class Usuario extends BaseModel {
       emailVerificado: emailVerificado ?? this.emailVerificado,
     );
   }
-
-  // REMOVA o método fromFirestore pois agora temos o fromMap
 }

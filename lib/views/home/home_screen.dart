@@ -1,14 +1,9 @@
 // views/home/home_page.dart
 import 'package:flutter/material.dart';
-import 'package:projeto_padrao/enums/permissao_usuario.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/auth_controller.dart';
 import '../../routes/app_routes.dart';
 import '../../app/app_widget.dart';
-
-// Importe as telas que criamos
-import '../usuarios/usuario_list_screen.dart';
-import '../perfis/perfil_list_screen.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -48,7 +43,7 @@ class _HomePageState extends State<HomePage> {
         title: Text(
           authController.usuarioLogado != null
               ? 'Olá, ${authController.usuarioLogado!.nome}!'
-              : 'Sistema Padrão',
+              : 'Página Home',
         ),
         backgroundColor: Colors.blue,
         actions: [
@@ -179,64 +174,6 @@ class _HomePageState extends State<HomePage> {
 
           SizedBox(height: 20),
 
-          // Módulos do Sistema
-          Card(
-            elevation: 3,
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Módulos do Sistema',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  SizedBox(height: 16),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: [
-                      _buildModuleButton(
-                        icon: Icons.people,
-                        label: 'Usuários',
-                        color: Colors.blue,
-                        onTap: () => _abrirUsuarios(),
-                        enabled: true,
-                      ),
-                      _buildModuleButton(
-                        icon: Icons.assignment_ind,
-                        label: 'Perfis',
-                        color: Colors.green,
-                        onTap: () => _abrirPerfis(),
-                        enabled: true,
-                      ),
-                      _buildModuleButton(
-                        icon: Icons.bar_chart,
-                        label: 'Relatórios',
-                        color: Colors.orange,
-                        onTap: () => _abrirRelatorios(),
-                        enabled: usuario.perfil.temPermissao(
-                          PermissaoUsuario.visualizarRelatorios,
-                        ),
-                      ),
-                      _buildModuleButton(
-                        icon: Icons.settings,
-                        label: 'Configurações',
-                        color: Colors.purple,
-                        onTap: () => _abrirConfiguracoes(),
-                        enabled: usuario.perfil.temPermissao(
-                          PermissaoUsuario.configurarSistema,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          SizedBox(height: 20),
-
           // Informações do usuário
           Card(
             elevation: 3,
@@ -257,7 +194,6 @@ class _HomePageState extends State<HomePage> {
                     'Email Verificado',
                     usuario.emailVerificado ? 'Sim' : 'Não',
                   ),
-                  _buildInfoRow('Perfil', usuario.perfil.nome),
                   _buildInfoRow(
                     'Data de Criação',
                     '${usuario.dataCriacao.day}/${usuario.dataCriacao.month}/${usuario.dataCriacao.year}',
@@ -294,7 +230,7 @@ class _HomePageState extends State<HomePage> {
                       children: usuario.perfil.permissoes.map((permissao) {
                         return Chip(
                           label: Text(
-                            permissao.nome,
+                            permissao.name.replaceAll('_', ' '),
                             style: TextStyle(fontSize: 12),
                           ),
                           backgroundColor: Colors.blue[50],
@@ -462,149 +398,21 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildModuleButton({
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onTap,
-    required bool enabled,
-  }) {
-    return GestureDetector(
-      onTap: enabled ? onTap : null,
-      child: Container(
-        width: 110,
-        padding: EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: enabled ? color.withOpacity(0.1) : Colors.grey[100],
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: enabled ? color.withOpacity(0.3) : Colors.grey[300]!,
-          ),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 32, color: enabled ? color : Colors.grey),
-            SizedBox(height: 8),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: enabled ? color : Colors.grey,
-              ),
-            ),
-            if (!enabled) ...[
-              SizedBox(height: 4),
-              Text(
-                'Sem acesso',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 10, color: Colors.grey),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget? _buildFloatingActionButton(AuthController authController) {
     if (authController.usuarioLogado == null) return null;
 
     return FloatingActionButton(
       onPressed: () {
-        // Ação do FAB - Abrir criação rápida
-        _showQuickActions(context);
+        // Ação do FAB
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ação do botão flutuante!'),
+            duration: Duration(seconds: 2),
+          ),
+        );
       },
       backgroundColor: Colors.blue,
       child: Icon(Icons.add, color: Colors.white),
-    );
-  }
-
-  void _showQuickActions(BuildContext context) {
-    final authController = Provider.of<AuthController>(context, listen: false);
-    final usuario = authController.usuarioLogado!;
-
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => Container(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Criação Rápida',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 16),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                if (usuario.perfil.temPermissao(
-                  PermissaoUsuario.administrarUsuarios,
-                ))
-                  _buildQuickActionButton(
-                    icon: Icons.person_add,
-                    label: 'Novo Usuário',
-                    onTap: () {
-                      Navigator.pop(context);
-                      _abrirUsuarios();
-                    },
-                  ),
-                if (usuario.perfil.temPermissao(
-                  PermissaoUsuario.administrarUsuarios,
-                ))
-                  _buildQuickActionButton(
-                    icon: Icons.assignment_ind,
-                    label: 'Novo Perfil',
-                    onTap: () {
-                      Navigator.pop(context);
-                      _abrirPerfis();
-                    },
-                  ),
-              ],
-            ),
-            SizedBox(height: 16),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildQuickActionButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 100,
-        padding: EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.blue[50],
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.blue[100]!),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 24, color: Colors.blue),
-            SizedBox(height: 8),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: Colors.blue[700],
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -618,46 +426,12 @@ class _HomePageState extends State<HomePage> {
         _verPerfil();
         break;
       case 'settings':
-        _abrirConfiguracoes();
+        _verConfiguracoes();
         break;
       case 'logout':
         _confirmarLogout(authController, context);
         break;
     }
-  }
-
-  // === NOVOS MÉTODOS PARA ABRIR AS TELAS ===
-
-  void _abrirUsuarios() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => UsuarioListScreen()),
-    );
-  }
-
-  void _abrirPerfis() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => PerfilListScreen()),
-    );
-  }
-
-  void _abrirRelatorios() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Módulo de relatórios em desenvolvimento...'),
-        duration: Duration(seconds: 2),
-      ),
-    );
-  }
-
-  void _abrirConfiguracoes() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Módulo de configurações em desenvolvimento...'),
-        duration: Duration(seconds: 2),
-      ),
-    );
   }
 
   void _alterarSenha(AuthController authController) {
@@ -689,6 +463,15 @@ class _HomePageState extends State<HomePage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Navegando para atividades...'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _verConfiguracoes() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Navegando para configurações...'),
         duration: Duration(seconds: 2),
       ),
     );

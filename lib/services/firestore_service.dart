@@ -24,7 +24,7 @@ class FirestoreService {
     }
   }
 
-  // Busca um usuário pelo ID - CORRIGIDO
+  // Busca um usuário pelo ID
   Future<Usuario?> getUserById(String userId) async {
     try {
       print('🔍 [FIRESTORE] Buscando usuário com ID: $userId');
@@ -41,8 +41,7 @@ class FirestoreService {
         print('📊 [FIRESTORE] Campos encontrados: ${data.keys}');
 
         try {
-          // CORREÇÃO: Usar o factory constructor corretamente
-          Usuario usuario = Usuario.fromMap(data, userDoc.id);
+          Usuario usuario = Usuario.fromMap(data);
           print('✅ [FIRESTORE] Usuário convertido: ${usuario.nome}');
           return usuario;
         } catch (e) {
@@ -81,22 +80,6 @@ class FirestoreService {
     } catch (e) {
       print('❌ [FIRESTORE] Erro ao verificar usuário: $e');
       return false;
-    }
-  }
-
-  // Buscar todos os usuários (método útil)
-  Future<List<Usuario>> getAllUsers() async {
-    try {
-      QuerySnapshot querySnapshot = await _firestore
-          .collection('usuarios')
-          .get();
-
-      return querySnapshot.docs.map((doc) {
-        return Usuario.fromMap(doc.data() as Map<String, dynamic>, doc.id);
-      }).toList();
-    } catch (e) {
-      print('❌ [FIRESTORE] Erro ao buscar usuários: $e');
-      return [];
     }
   }
 }
