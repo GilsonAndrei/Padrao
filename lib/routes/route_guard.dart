@@ -2,9 +2,9 @@
 import 'package:flutter/material.dart';
 import 'package:projeto_padrao/enums/permissao_usuario.dart';
 import 'package:projeto_padrao/models/usuario.dart';
-import 'package:projeto_padrao/services/session_service.dart';
+import 'package:projeto_padrao/services/session/session_service.dart';
 import 'package:provider/provider.dart';
-import '../controllers/auth_controller.dart';
+import '../controllers/auth/auth_controller.dart';
 import '../views/auth/login_screen.dart';
 import '../views/home/home_screen.dart';
 

@@ -2,7 +2,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:projeto_padrao/models/security_event.dart';
-import '../models/usuario.dart';
+import '../../models/usuario.dart';
 
 class SecurityMonitorService {
   static final SecurityMonitorService _instance =

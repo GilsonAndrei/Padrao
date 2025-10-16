@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:projeto_padrao/enums/permissao_usuario.dart';
 
 class PerfilUsuario {
@@ -32,24 +33,43 @@ class PerfilUsuario {
     };
   }
 
-  // Cria a partir de um Map (vindo do Firebase/Firestore)
   factory PerfilUsuario.fromMap(Map<String, dynamic> map) {
     return PerfilUsuario(
-      id: map['id'] ?? '',
-      nome: map['nome'] ?? '',
-      descricao: map['descricao'] ?? '',
-      permissoes:
-          (map['permissoes'] as List<dynamic>?)
-              ?.map((e) => _permissaoFromString(e.toString()))
-              .whereType<PermissaoUsuario>()
-              .toList() ??
-          [],
-      dataCriacao: DateTime.fromMillisecondsSinceEpoch(map['dataCriacao']),
-      dataAtualizacao: map['dataAtualizacao'] != null
-          ? DateTime.fromMillisecondsSinceEpoch(map['dataAtualizacao'])
-          : null,
+      id: map['id']?.toString() ?? '',
+      nome: map['nome']?.toString() ?? '',
+      descricao: map['descricao']?.toString() ?? '',
+      permissoes: _parsePermissoes(map['permissoes']),
+      dataCriacao: _parseDateTime(map['dataCriacao']),
+      dataAtualizacao: _parseDateTime(map['dataAtualizacao']),
       ativo: map['ativo'] ?? true,
     );
+  }
+
+  // ✅ ADICIONE este método auxiliar:
+  static DateTime _parseDateTime(dynamic date) {
+    if (date == null) return DateTime.now();
+    if (date is DateTime) return date;
+    if (date is Timestamp) return date.toDate();
+    if (date is int) return DateTime.fromMillisecondsSinceEpoch(date);
+    if (date is String) return DateTime.tryParse(date) ?? DateTime.now();
+    return DateTime.now();
+  }
+
+  static List<PermissaoUsuario> _parsePermissoes(dynamic permissoes) {
+    if (permissoes is! List) return [];
+
+    return permissoes
+        .map((e) {
+          try {
+            if (e is PermissaoUsuario) return e;
+            if (e is String) return _permissaoFromString(e);
+            return null;
+          } catch (_) {
+            return null;
+          }
+        })
+        .whereType<PermissaoUsuario>()
+        .toList();
   }
 
   // Cria uma cópia do perfil com possíveis alterações
@@ -92,7 +112,7 @@ class PerfilUsuario {
     );
   }
 
-  // Helper para converter string para PermissaoUsuario
+  // models/perfil_usuario.dart - ADICIONE este método estático:
   static PermissaoUsuario? _permissaoFromString(String codigo) {
     try {
       return PermissaoUsuario.values.firstWhere((e) => e.codigo == codigo);

@@ -1,3 +1,4 @@
+// enums/permissao_usuario.dart
 enum PermissaoUsuario {
   visualizarCadastro,
   cadastrarPedidos,
@@ -6,7 +7,6 @@ enum PermissaoUsuario {
   visualizarRelatorios,
   administrarUsuarios,
   configurarSistema,
-  // Adicione outras permissões conforme necessário
 }
 
 extension PermissaoUsuarioExtension on PermissaoUsuario {

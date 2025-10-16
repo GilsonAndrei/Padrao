@@ -1,6 +1,6 @@
 // widgets/session_confirmation_dialog.dart
 import 'package:flutter/material.dart';
-import '../services/session_tracker_service.dart';
+import '../services/session/session_tracker_service.dart';
 
 class SessionConfirmationDialog extends StatelessWidget {
   final String userId;

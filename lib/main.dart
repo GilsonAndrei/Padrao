@@ -1,6 +1,6 @@
 // main.dart
 import 'package:flutter/material.dart';
-import 'package:projeto_padrao/services/session_expiry_service.dart';
+import 'package:projeto_padrao/services/session/session_expiry_service.dart';
 import 'app/app_widget.dart';
 
 void main() {

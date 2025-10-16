@@ -1,12 +1,14 @@
 // app/app_widget.dart - CORRIGIDO
 import 'package:flutter/material.dart';
+import 'package:projeto_padrao/controllers/perfil/perfil_controller.dart';
+import 'package:projeto_padrao/controllers/usuario/usuario_controller.dart';
 import 'package:projeto_padrao/core/themes/app_theme.dart';
 import 'package:projeto_padrao/firebase_options.dart';
 import 'package:projeto_padrao/routes/app_routes.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 
-import '../controllers/auth_controller.dart';
+import '../controllers/auth/auth_controller.dart';
 
 class AppWidget extends StatefulWidget {
   const AppWidget({Key? key}) : super(key: key);
@@ -42,6 +44,8 @@ class _AppWidgetState extends State<AppWidget> {
           return MultiProvider(
             providers: [
               ChangeNotifierProvider(create: (_) => AuthController()),
+              ChangeNotifierProvider(create: (context) => UsuarioController()),
+              ChangeNotifierProvider(create: (context) => PerfilController()),
             ],
             child: Builder(
               // 👈 CORREÇÃO: Trocar Consumer por Builder

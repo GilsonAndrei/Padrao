@@ -1,7 +1,7 @@
 // views/auth/signup_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../controllers/auth_controller.dart';
+import '../../controllers/auth/auth_controller.dart';
 import '../../widgets/custom_text_field.dart';
 
 class SignUpScreen extends StatefulWidget {

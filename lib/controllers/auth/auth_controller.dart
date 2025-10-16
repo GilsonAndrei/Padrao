@@ -6,13 +6,13 @@ import 'package:flutter/material.dart';
 import 'package:projeto_padrao/app/app_widget.dart';
 import 'package:projeto_padrao/models/perfil_usuario.dart';
 import 'package:projeto_padrao/models/security_event.dart';
-import 'package:projeto_padrao/services/device_service.dart';
-import 'package:projeto_padrao/services/session_expiry_service.dart';
-import 'package:projeto_padrao/services/session_tracker_service.dart';
+import 'package:projeto_padrao/services/session/device_service.dart';
+import 'package:projeto_padrao/services/session/session_expiry_service.dart';
+import 'package:projeto_padrao/services/session/session_tracker_service.dart';
 import 'package:projeto_padrao/widgets/session_confirmation_dialog.dart';
-import '../models/usuario.dart';
-import '../services/auth_service.dart';
-import '../services/security_monitor_service.dart';
+import '../../models/usuario.dart';
+import '../../services/auth/auth_service.dart';
+import '../../services/session/security_monitor_service.dart';
 
 class AuthController with ChangeNotifier {
   final AuthService _authService = AuthService();

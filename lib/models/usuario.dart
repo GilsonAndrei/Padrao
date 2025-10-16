@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:projeto_padrao/enums/permissao_usuario.dart';
 import 'package:projeto_padrao/models/perfil_usuario.dart';
 
@@ -45,25 +46,35 @@ class Usuario {
     };
   }
 
-  // Cria a partir de um Map
+  // models/usuario.dart - ATUALIZE o fromMap:
   factory Usuario.fromMap(Map<String, dynamic> map) {
     return Usuario(
-      id: map['id'] ?? '',
-      nome: map['nome'] ?? '',
-      email: map['email'] ?? '',
-      telefone: map['telefone'],
-      fotoUrl: map['fotoUrl'],
-      perfil: PerfilUsuario.fromMap(Map<String, dynamic>.from(map['perfil'])),
-      dataCriacao: DateTime.fromMillisecondsSinceEpoch(map['dataCriacao']),
-      dataAtualizacao: map['dataAtualizacao'] != null
-          ? DateTime.fromMillisecondsSinceEpoch(map['dataAtualizacao'])
-          : null,
-      ultimoAcesso: map['ultimoAcesso'] != null
-          ? DateTime.fromMillisecondsSinceEpoch(map['ultimoAcesso'])
-          : null,
+      id: map['id']?.toString() ?? '',
+      nome: map['nome']?.toString() ?? '',
+      email: map['email']?.toString() ?? '',
+      telefone: map['telefone']?.toString(),
+      fotoUrl: map['fotoUrl']?.toString(),
+      perfil: PerfilUsuario.fromMap(
+        map['perfil'] is Map<String, dynamic>
+            ? Map<String, dynamic>.from(map['perfil'])
+            : {},
+      ),
+      dataCriacao: _parseDateTime(map['dataCriacao']),
+      dataAtualizacao: _parseDateTime(map['dataAtualizacao']),
+      ultimoAcesso: _parseDateTime(map['ultimoAcesso']),
       ativo: map['ativo'] ?? true,
       emailVerificado: map['emailVerificado'] ?? false,
     );
+  }
+
+  // ✅ ADICIONE este método auxiliar:
+  static DateTime _parseDateTime(dynamic date) {
+    if (date == null) return DateTime.now();
+    if (date is DateTime) return date;
+    if (date is Timestamp) return date.toDate();
+    if (date is int) return DateTime.fromMillisecondsSinceEpoch(date);
+    if (date is String) return DateTime.tryParse(date) ?? DateTime.now();
+    return DateTime.now();
   }
 
   // Cria uma cópia do usuário com possíveis alterações

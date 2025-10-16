@@ -1,9 +1,9 @@
 // services/auth_service.dart
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:projeto_padrao/enums/permissao_usuario.dart';
-import '../models/usuario.dart';
-import '../models/perfil_usuario.dart';
-import 'firestore_service.dart';
+import '../../models/usuario.dart';
+import '../../models/perfil_usuario.dart';
+import '../firestore_service.dart';
 
 class AuthService {
   // Rate limiting básico
