@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1046853830353",
+    "project_id": "padrao-210e0",
+    "storage_bucket": "padrao-210e0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1046853830353:android:e0930dd2591d2935e9a7f0",
+        "android_client_info": {
+          "package_name": "com.example.projeto_padrao"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBcDRQab3BY4e_HsfPlk2XHlZ_eQHUQSCY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
