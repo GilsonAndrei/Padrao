@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:projeto_padrao/app/app_widget.dart';
+import 'package:projeto_padrao/core/utils/logger_service.dart';
 import 'package:projeto_padrao/models/perfil_usuario.dart';
 import 'package:projeto_padrao/models/security_event.dart';
 import 'package:projeto_padrao/services/session/device_service.dart';
@@ -25,11 +26,52 @@ class AuthController with ChangeNotifier {
   Usuario? get usuarioLogado => _usuarioLogado;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
-  // 👇 CORREÇÃO: Controlar inicialização da sessão
   bool _sessionInitialized = false;
   String? _currentDeviceId;
-  // Login
-  // Login - CORRIGIDO
+
+  // ✅ MÉTODO AUXILIAR PARA VERIFICAR SE USUÁRIO ESTÁ ATIVO
+  Future<Usuario?> _verificarUsuarioAtivo(String email) async {
+    try {
+      print('🔍 [CONTROLLER] Verificando status do usuário: $email');
+
+      // Buscar usuário pelo email no Firestore
+      final usuario = await _authService.getUserByEmail(email);
+
+      if (usuario != null) {
+        print('📊 [CONTROLLER] Status do usuário ${usuario.nome}:');
+        print('   ✅ Ativo: ${usuario.ativo}');
+        print('   📧 Email verificado: ${usuario.emailVerificado}');
+        print('   👑 Admin: ${usuario.isAdmin}');
+
+        // ✅ VERIFICAÇÃO DE USUÁRIO DESATIVADO
+        if (!usuario.ativo) {
+          print('🚫 [CONTROLLER] Usuário desativado: ${usuario.nome}');
+
+          // MONITORAMENTO: Tentativa de login com usuário desativado
+          SecurityMonitorService.monitorUserActivity(
+            usuario: usuario,
+            action: 'login_blocked_disabled_user',
+            resource: 'auth_system',
+            details: 'Tentativa de login com usuário desativado',
+            ipAddress: 'mobile_app',
+            severity: SecuritySeverity.medium,
+          );
+
+          return null; // Retorna null para indicar usuário desativado
+        }
+
+        return usuario; // Retorna usuário se estiver ativo
+      }
+
+      print('❌ [CONTROLLER] Usuário não encontrado no sistema');
+      return null;
+    } catch (e) {
+      print('❌ [CONTROLLER] Erro ao verificar status do usuário: $e');
+      return null;
+    }
+  }
+
+  // Login - ATUALIZADO COM VALIDAÇÃO DE USUÁRIO DESATIVADO
   Future<bool> login(String email, String password) async {
     _setLoading(true);
     _clearError();
@@ -37,6 +79,19 @@ class AuthController with ChangeNotifier {
     try {
       print('🔐 [CONTROLLER] Iniciando login para: $email');
 
+      // ✅ PRIMEIRO VERIFICA SE O USUÁRIO ESTÁ ATIVO
+      final usuarioAtivo = await _verificarUsuarioAtivo(email);
+
+      if (usuarioAtivo == null) {
+        // Usuário desativado ou não encontrado
+        _setError(
+          'Usuário desativado ou não encontrado. Entre em contato com o administrador.',
+        );
+        _setLoading(false);
+        return false;
+      }
+
+      // ✅ SE USUÁRIO ESTÁ ATIVO, PROSSEGUE COM LOGIN
       _usuarioLogado = await _authService.signInWithEmailAndPassword(
         email,
         password,
@@ -63,6 +118,7 @@ class AuthController with ChangeNotifier {
           _usuarioLogado!,
           _currentDeviceId!,
         );
+
         // 👇 CORREÇÃO CRÍTICA: FORÇAR PERSISTÊNCIA
         await _forcarPersistenciaFirebase();
 
@@ -98,58 +154,98 @@ class AuthController with ChangeNotifier {
   }
 
   Future<bool> _checkAndHandleOtherSessions() async {
-    if (_usuarioLogado == null || _currentDeviceId == null) return false;
+    if (_usuarioLogado == null || _currentDeviceId == null) {
+      print('❌ [CONTROLLER] Dados insuficientes para verificar sessões');
+      return false;
+    }
 
     try {
-      print('🔍 [CONTROLLER] Verificando outras sessões...');
+      print(
+        '🔍 [CONTROLLER] Verificando outras sessões para ${_usuarioLogado!.nome}',
+      );
 
-      // Verificar se existem outras sessões ativas
-      final hasOtherSessions =
-          await SessionTrackerService.hasOtherActiveSessions(
-            _usuarioLogado!.id,
-            _currentDeviceId!,
+      // ✅ VERIFICAÇÃO MAIS DETALHADA
+      final otherSessions = await SessionTrackerService.getOtherActiveSessions(
+        _usuarioLogado!.id,
+        _currentDeviceId!,
+      );
+
+      print(
+        '📊 [CONTROLLER] ${otherSessions.length} outras sessões encontradas',
+      );
+
+      if (otherSessions.isNotEmpty) {
+        // ✅ DETALHES DAS SESSÕES PARA DEBUG
+        for (final session in otherSessions.take(3)) {
+          // Mostra apenas as 3 primeiras
+          print(
+            '   📱 Sessão: ${session['deviceId']} - ${session['lastActivity']}',
+          );
+        }
+
+        // ✅ VERIFICA SE É UMA SESSÃO RECENTE (possível tentativa de invasão)
+        final hasRecentSessions = otherSessions.any((session) {
+          final lastActivity = session['lastActivity']?.toDate();
+          return lastActivity != null &&
+              DateTime.now().difference(lastActivity).inMinutes < 5;
+        });
+
+        if (hasRecentSessions) {
+          print(
+            '🚨 [CONTROLLER] Sessões recentes detectadas - possível segurança comprometida',
           );
 
-      print('📊 [CONTROLLER] Tem outras sessões: $hasOtherSessions');
+          // MONITORAMENTO DE SEGURANÇA
+          SecurityMonitorService.monitorUserActivity(
+            usuario: _usuarioLogado!,
+            action: 'concurrent_session_detected',
+            resource: 'auth_system',
+            details: 'Múltiplas sessões recentes detectadas',
+            ipAddress: 'mobile_app',
+            severity: SecuritySeverity.high,
+          );
+        }
 
-      if (hasOtherSessions) {
-        // Obter contagem exata de sessões
-        final otherSessions =
-            await SessionTrackerService.getOtherActiveSessions(
-              _usuarioLogado!.id,
-              _currentDeviceId!,
-            );
-
-        print(
-          '👥 [CONTROLLER] ${otherSessions.length} outras sessões encontradas',
-        );
-
-        // 👇 MOSTRAR DIALOG DE CONFIRMAÇÃO
+        // 👇 MOSTRAR DIALOG DE CONFIRMAÇÃO MELHORADO
         final bool shouldContinue = await _showSessionConfirmationDialog(
           otherSessions.length,
         );
 
         if (!shouldContinue) {
-          print('🚫 [CONTROLLER] Login cancelado pelo usuário');
-          await _authService.signOut(); // Fazer logout já que cancelou
+          print('🚫 [CONTROLLER] Login cancelado pelo usuário por segurança');
+          await _authService.signOut();
           _usuarioLogado = null;
           _currentDeviceId = null;
-          return true; // Indica que houve outras sessões e usuário cancelou
+          return true;
         }
 
-        // 👇 USUÁRIO CONFIRMOU - DESCONECTAR OUTRAS SESSÕES
-        print('🔒 [CONTROLLER] Desconectando outras sessões...');
+        // 👇 DESCONECTAR SESSÕES COM CONFIRMAÇÃO
+        print(
+          '🔒 [CONTROLLER] Desconectando ${otherSessions.length} sessões...',
+        );
         await SessionTrackerService.terminateOtherSessions(
           _usuarioLogado!.id,
           _currentDeviceId!,
         );
-        print('✅ [CONTROLLER] Outras sessões desconectadas');
+
+        print('✅ [CONTROLLER] Sessões desconectadas com sucesso');
       }
 
-      return false; // Não houve problema com outras sessões
-    } catch (e) {
-      print('❌ [CONTROLLER] Erro ao verificar sessões: $e');
       return false;
+    } catch (e) {
+      print('❌ [CONTROLLER] Erro crítico ao verificar sessões: $e');
+
+      // Em caso de erro, por segurança, não permite o login
+      SecurityMonitorService.monitorUserActivity(
+        usuario: _usuarioLogado ?? _createTempUser('unknown'),
+        action: 'session_check_failed',
+        resource: 'auth_system',
+        details: 'Erro ao verificar sessões: $e',
+        ipAddress: 'mobile_app',
+        severity: SecuritySeverity.high,
+      );
+
+      return true; // Bloqueia o login por segurança
     }
   }
 
@@ -191,21 +287,42 @@ class AuthController with ChangeNotifier {
   // 👇 ADICIONE ESTE MÉTODO NOVO
   Future<void> _forcarPersistenciaFirebase() async {
     try {
-      // Forçar o Firebase a manter a sessão
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
-        print('💾 [CONTROLLER] Forçando persistência Firebase:');
-        print('   👤 UID: ${user.uid}');
-        print('   📧 Email: ${user.email}');
-        print('   ✅ Verificado: ${user.emailVerified}');
+        LoggerService.debug('PERSISTENCE', 'Forçando persistência Firebase:');
+        LoggerService.debug('PERSISTENCE', '   👤 UID: ${user.uid}');
+        LoggerService.debug('PERSISTENCE', '   📧 Email: ${user.email}');
+        LoggerService.debug(
+          'PERSISTENCE',
+          '   ✅ Verificado: ${user.emailVerified}',
+        );
 
-        // Recarregar usuário para garantir persistência
+        // ✅ TENTATIVA DE PERSISTÊNCIA MAIS ROBUSTA
         await user.reload();
         final refreshedUser = FirebaseAuth.instance.currentUser;
-        print('   🔄 Usuário recarregado: ${refreshedUser?.email}');
+
+        if (refreshedUser != null) {
+          LoggerService.success('PERSISTENCE', 'Sessão persistida com sucesso');
+
+          // ✅ VERIFICA SE O TOKEN É VÁLIDO
+          final token = await refreshedUser.getIdToken();
+          LoggerService.debug(
+            'PERSISTENCE',
+            '   🔐 Token válido: ${token?.isNotEmpty}',
+          );
+        } else {
+          LoggerService.error(
+            'PERSISTENCE',
+            'Falha na persistência - usuário null após reload',
+          );
+        }
       }
     } catch (e) {
-      print('❌ [CONTROLLER] Erro ao forçar persistência: $e');
+      LoggerService.error(
+        'PERSISTENCE',
+        'Erro ao forçar persistência',
+        error: e,
+      );
     }
   }
 
@@ -379,7 +496,6 @@ class AuthController with ChangeNotifier {
   }
 
   // 👇 ATUALIZAR MÉTODO DE LOGOUT
-  // 👇 ATUALIZAR MÉTODO DE LOGOUT
   Future<void> logout() async {
     // Parar timer de atividade
     _activityTimer?.cancel();
@@ -401,7 +517,7 @@ class AuthController with ChangeNotifier {
     print('🚪 [CONTROLLER] Logout completo');
   }
 
-  // Verificar se usuário está logado (MÉTODO CORRIGIDO)
+  // ✅ ATUALIZAR MÉTODO DE VERIFICAÇÃO DE USUÁRIO LOGADO
   Future<bool> verificarUsuarioLogado() async {
     try {
       // Verifica se há um usuário autenticado no Firebase Auth
@@ -411,6 +527,27 @@ class AuthController with ChangeNotifier {
         _usuarioLogado = await _authService.getUserById(currentUser.uid);
 
         if (_usuarioLogado != null) {
+          // ✅ VERIFICA SE O USUÁRIO AINDA ESTÁ ATIVO
+          if (!_usuarioLogado!.ativo) {
+            print(
+              '🚫 [CONTROLLER] Usuário foi desativado durante a sessão: ${_usuarioLogado!.nome}',
+            );
+
+            // MONITORAMENTO: Sessão encerrada por usuário desativado
+            SecurityMonitorService.monitorUserActivity(
+              usuario: _usuarioLogado!,
+              action: 'session_terminated_disabled_user',
+              resource: 'auth_system',
+              details: 'Sessão encerrada porque usuário foi desativado',
+              ipAddress: 'mobile_app',
+              severity: SecuritySeverity.medium,
+            );
+
+            // Fazer logout automático
+            await logout();
+            return false;
+          }
+
           notifyListeners();
 
           // MONITORAMENTO: Sessão recuperada
@@ -432,76 +569,8 @@ class AuthController with ChangeNotifier {
     }
   }
 
-  // Criar usuário temporário para monitoramento quando não há usuário real
-  Usuario _createTempUser(String email) {
-    return Usuario(
-      id: 'unknown_${DateTime.now().millisecondsSinceEpoch}',
-      nome: 'Usuário Desconhecido',
-      email: email,
-      perfil: PerfilUsuario(
-        id: 'temp_profile',
-        nome: 'Temporário',
-        descricao: 'Perfil temporário para monitoramento',
-        permissoes: [],
-        dataCriacao: DateTime.now(),
-        ativo: true,
-      ),
-      dataCriacao: DateTime.now(),
-      ativo: true,
-      emailVerificado: false,
-      isAdmin: false,
-    );
-  }
-
-  // Traduz códigos de erro do Firebase
-  String _traduzirErroFirebase(String codigo) {
-    switch (codigo) {
-      case 'user-not-found':
-        return 'Nenhuma conta encontrada com este e-mail.';
-      case 'wrong-password':
-        return 'Senha incorreta.';
-      case 'invalid-email':
-        return 'E-mail inválido.';
-      case 'user-disabled':
-        return 'Esta conta foi desativada.';
-      case 'too-many-requests':
-        return 'Muitas tentativas. Tente novamente mais tarde.';
-      case 'operation-not-allowed':
-        return 'Operação não permitida.';
-      case 'network-request-failed':
-        return 'Erro de conexão. Verifique sua internet.';
-      case 'email-already-in-use':
-        return 'Este e-mail já está em uso.';
-      case 'weak-password':
-        return 'A senha é muito fraca. Use pelo menos 6 caracteres.';
-      case 'configuration-not-found':
-        return 'Configuração do Firebase não encontrada.';
-      default:
-        return 'Erro: $codigo';
-    }
-  }
-
-  void _setLoading(bool loading) {
-    _isLoading = loading;
-    notifyListeners();
-  }
-
-  void _setError(String message) {
-    _errorMessage = message;
-    notifyListeners();
-  }
-
-  void _clearError() {
-    _errorMessage = null;
-    notifyListeners();
-  }
-
-  // INICIALIZAR SESSÃO - CORRIGIDO
-  // controllers/auth_controller.dart - ATUALIZE o inicializarSessao
+  // ✅ ATUALIZAR MÉTODO DE INICIALIZAÇÃO DE SESSÃO
   Future<void> inicializarSessao() async {
-    if (_sessionInitialized) return;
-    _sessionInitialized = true;
-
     if (_sessionInitialized) {
       print('⏭️ [CONTROLLER] Sessão já inicializada, ignorando...');
       return;
@@ -532,6 +601,27 @@ class AuthController with ChangeNotifier {
         _usuarioLogado = await _authService.getUserById(currentUser.uid);
 
         if (_usuarioLogado != null) {
+          // ✅ VERIFICA SE O USUÁRIO ESTÁ ATIVO
+          if (!_usuarioLogado!.ativo) {
+            print(
+              '🚫 [CONTROLLER] Usuário desativado durante inicialização: ${_usuarioLogado!.nome}',
+            );
+
+            // MONITORAMENTO: Sessão bloqueada por usuário desativado
+            SecurityMonitorService.monitorUserActivity(
+              usuario: _usuarioLogado!,
+              action: 'session_blocked_disabled_user',
+              resource: 'auth_system',
+              details: 'Sessão bloqueada porque usuário está desativado',
+              ipAddress: 'mobile_app',
+              severity: SecuritySeverity.medium,
+            );
+
+            await logout();
+            _setLoading(false);
+            return;
+          }
+
           _currentDeviceId = await DeviceService.getDeviceId();
 
           // 👇 VERIFICAR SE A SESSÃO ESTÁ EXPIRADA
@@ -560,11 +650,6 @@ class AuthController with ChangeNotifier {
         }
       } else {
         print('ℹ️ [CONTROLLER] Nenhuma sessão ativa no Firebase');
-        print('   💡 Possíveis causas:');
-        print('   • Persistência não habilitada');
-        print('   • App reinstalado');
-        print('   • Dados limpos');
-        print('   • Problema de configuração Firebase');
       }
 
       _setLoading(false);
@@ -574,6 +659,66 @@ class AuthController with ChangeNotifier {
       _setLoading(false);
       _sessionInitialized = false;
     }
+  }
+
+  // Criar usuário temporário para monitoramento quando não há usuário real
+  Usuario _createTempUser(String email) {
+    return Usuario(
+      id: 'unknown_${DateTime.now().millisecondsSinceEpoch}',
+      nome: 'Usuário Desconhecido',
+      email: email,
+      perfil: PerfilUsuario(
+        id: 'temp_profile',
+        nome: 'Temporário',
+        descricao: 'Perfil temporário para monitoramento',
+        permissoes: [],
+        dataCriacao: DateTime.now(),
+        ativo: true,
+      ),
+      dataCriacao: DateTime.now(),
+      ativo: true,
+      emailVerificado: false,
+      isAdmin: false,
+    );
+  }
+
+  // ✅ ATUALIZAR TRADUÇÃO DE ERROS DO FIREBASE
+  String _traduzirErroFirebase(String codigo) {
+    final errors = {
+      'user-not-found': 'Nenhuma conta encontrada com este e-mail.',
+      'wrong-password': 'Senha incorreta. Verifique suas credenciais.',
+      'invalid-email': 'Formato de e-mail inválido.',
+      'user-disabled':
+          'Conta desativada. Entre em contato com o administrador.',
+      'too-many-requests':
+          'Muitas tentativas. Aguarde 15 minutos e tente novamente.',
+      'operation-not-allowed': 'Operação não permitida no momento.',
+      'network-request-failed': 'Erro de conexão. Verifique sua internet.',
+      'email-already-in-use': 'Este e-mail já está cadastrado.',
+      'weak-password': 'Senha muito fraca. Use pelo menos 6 caracteres.',
+      'configuration-not-found': 'Erro de configuração do sistema.',
+      'invalid-credential': 'Credenciais inválidas ou expiradas.',
+      'account-exists-with-different-credential':
+          'Conta já existe com credenciais diferentes.',
+      'requires-recent-login': 'Requer login recente. Faça login novamente.',
+    };
+
+    return errors[codigo] ?? 'Erro desconhecido: $codigo';
+  }
+
+  void _setLoading(bool loading) {
+    _isLoading = loading;
+    notifyListeners();
+  }
+
+  void _setError(String message) {
+    _errorMessage = message;
+    notifyListeners();
+  }
+
+  void _clearError() {
+    _errorMessage = null;
+    notifyListeners();
   }
 
   // 👇 RASTREAR ATIVIDADE DO USUÁRIO

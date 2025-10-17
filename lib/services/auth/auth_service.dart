@@ -1,5 +1,7 @@
 // services/auth_service.dart
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:projeto_padrao/core/utils/logger_service.dart';
 import 'package:projeto_padrao/enums/permissao_usuario.dart';
 import '../../models/usuario.dart';
 import '../../models/perfil_usuario.dart';
@@ -13,10 +15,58 @@ class AuthService {
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirestoreService _firestoreService = FirestoreService();
+
   AuthService() {
     // 👇 HABILITAR PERSISTÊNCIA
     _auth.setPersistence(Persistence.LOCAL);
     print('💾 [AUTH] Persistência local habilitada');
+  }
+
+  // ✅ MÉTODO NOVO: Buscar usuário por email
+  Future<Usuario?> getUserByEmail(String email) async {
+    try {
+      print('🔍 [SERVICE] Buscando usuário por email: $email');
+
+      final querySnapshot = await FirebaseFirestore.instance
+          .collection('usuarios')
+          .where('email', isEqualTo: email.toLowerCase())
+          .limit(1)
+          .get();
+
+      if (querySnapshot.docs.isNotEmpty) {
+        final doc = querySnapshot.docs.first;
+        final usuario = Usuario.fromMap(doc.data()..['id'] = doc.id);
+        print('✅ [SERVICE] Usuário encontrado: ${usuario.nome}');
+        return usuario;
+      }
+
+      print('❌ [SERVICE] Usuário não encontrado para email: $email');
+      return null;
+    } catch (e) {
+      print('❌ [SERVICE] Erro ao buscar usuário por email: $e');
+      return null;
+    }
+  }
+
+  Future<T> _executeWithRetry<T>(
+    Future<T> Function() operation, {
+    int maxRetries = 3,
+    Duration delay = const Duration(seconds: 1),
+  }) async {
+    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await operation();
+      } catch (e) {
+        if (attempt == maxRetries) rethrow;
+
+        LoggerService.warning(
+          'RETRY',
+          'Tentativa $attempt falhou, tentando novamente em ${delay.inSeconds}s',
+        );
+        await Future.delayed(delay * attempt); // Backoff exponencial
+      }
+    }
+    throw Exception('Todas as tentativas falharam');
   }
 
   // Login com email e senha
@@ -24,64 +74,68 @@ class AuthService {
     String email,
     String password,
   ) async {
-    // Verifica rate limiting
-    if (_isAccountLocked(email)) {
-      throw FirebaseAuthException(
-        code: 'too-many-requests',
-        message: 'Muitas tentativas. Tente novamente em 15 minutos.',
-      );
-    }
+    return await _executeWithRetry(() async {
+      // Verifica rate limiting
+      if (_isAccountLocked(email)) {
+        throw FirebaseAuthException(
+          code: 'too-many-requests',
+          message: 'Muitas tentativas. Tente novamente em 15 minutos.',
+        );
+      }
 
-    try {
-      print('🔐 [SERVICE] Tentando login com: $email');
+      try {
+        print('🔐 [SERVICE] Tentando login com: $email');
 
-      UserCredential userCredential = await _auth.signInWithEmailAndPassword(
-        email: email.trim(),
-        password: password,
-      );
-
-      print(
-        '✅ [SERVICE] Firebase Auth OK - User ID: ${userCredential.user!.uid}',
-      );
-
-      if (userCredential.user != null) {
-        // Busca os dados completos do usuário no Firestore
-        Usuario? usuario = await _firestoreService.getUserById(
-          userCredential.user!.uid,
+        UserCredential userCredential = await _auth.signInWithEmailAndPassword(
+          email: email.trim(),
+          password: password,
         );
 
-        if (usuario == null) {
-          print(
-            '⚠️ [SERVICE] Usuário não encontrado no Firestore, criando perfil padrão...',
+        print(
+          '✅ [SERVICE] Firebase Auth OK - User ID: ${userCredential.user!.uid}',
+        );
+
+        if (userCredential.user != null) {
+          // Busca os dados completos do usuário no Firestore
+          Usuario? usuario = await _firestoreService.getUserById(
+            userCredential.user!.uid,
           );
-          // Se não existe no Firestore, cria um usuário com perfil padrão
-          usuario = await _criarUsuarioPadrao(userCredential.user!);
 
           if (usuario == null) {
             print(
-              '❌ [SERVICE] Falha crítica: não foi possível criar usuário padrão',
+              '⚠️ [SERVICE] Usuário não encontrado no Firestore, criando perfil padrão...',
             );
-            // Mesmo se falhar, retorna um usuário básico
-            usuario = _criarUsuarioBasico(userCredential.user!);
+            // Se não existe no Firestore, cria um usuário com perfil padrão
+            usuario = await _criarUsuarioPadrao(userCredential.user!);
+
+            if (usuario == null) {
+              print(
+                '❌ [SERVICE] Falha crítica: não foi possível criar usuário padrão',
+              );
+              // Mesmo se falhar, retorna um usuário básico
+              usuario = _criarUsuarioBasico(userCredential.user!);
+            }
+          } else {
+            print(
+              '✅ [SERVICE] Usuário encontrado no Firestore: ${usuario.nome}',
+            );
           }
-        } else {
-          print('✅ [SERVICE] Usuário encontrado no Firestore: ${usuario.nome}');
+
+          return usuario;
         }
 
-        return usuario;
+        print('❌ [SERVICE] userCredential.user é null');
+        return null;
+      } on FirebaseAuthException catch (e) {
+        // Incrementa tentativas falhas
+        _recordFailedAttempt(email);
+        print('❌ [SERVICE] FirebaseAuthException: ${e.code} - ${e.message}');
+        rethrow;
+      } catch (e) {
+        print('❌ [SERVICE] Erro inesperado: $e');
+        rethrow;
       }
-
-      print('❌ [SERVICE] userCredential.user é null');
-      return null;
-    } on FirebaseAuthException catch (e) {
-      // Incrementa tentativas falhas
-      _recordFailedAttempt(email);
-      print('❌ [SERVICE] FirebaseAuthException: ${e.code} - ${e.message}');
-      rethrow;
-    } catch (e) {
-      print('❌ [SERVICE] Erro inesperado: $e');
-      rethrow;
-    }
+    });
   }
 
   bool _isAccountLocked(String email) {
@@ -235,8 +289,6 @@ class AuthService {
     await _auth.signOut();
     print('✅ [SERVICE] Usuário deslogado');
   }
-
-  // MÉTODOS NOVOS ADICIONADOS:
 
   // Buscar usuário por ID
   Future<Usuario?> getUserById(String userId) async {
