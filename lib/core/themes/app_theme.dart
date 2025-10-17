@@ -20,15 +20,16 @@ class AppTheme {
       // Scaffold
       scaffoldBackgroundColor: AppColors.background,
 
-      // AppBar
+      // AppBar - COM GRADIENTE GLOBAL
       appBarTheme: const AppBarTheme(
-        backgroundColor: AppColors.surface,
-        foregroundColor: AppColors.textPrimary,
-        elevation: 0,
+        backgroundColor: Colors.transparent, // Transparente para o gradiente
+        foregroundColor: Colors.white, // Ícones e texto em branco
+        elevation: 3,
         centerTitle: true,
-        iconTheme: IconThemeData(color: AppColors.primary),
+        iconTheme: IconThemeData(color: Colors.white, size: 24),
+        actionsIconTheme: IconThemeData(color: Colors.white, size: 24),
         titleTextStyle: TextStyle(
-          color: AppColors.textPrimary,
+          color: Colors.white,
           fontSize: 18,
           fontWeight: FontWeight.w600,
         ),
@@ -138,21 +139,117 @@ class AppTheme {
         ),
       ),
 
-      /*// Card
-      cardTheme: CardTheme(
-        color: AppColors.card,
-        elevation: 2,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.all(8),
-      ),
-
-      // Dialog
-      dialogTheme: DialogTheme(
-        backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        elevation: 4,
-      ), */
       useMaterial3: true,
+    );
+  }
+
+  // ✅ MÉTODO AUXILIAR: Para criar AppBars com gradiente consistentemente
+  static AppBar createGradientAppBar({
+    required String title,
+    List<Widget>? actions,
+    bool? automaticallyImplyLeading = true,
+    Widget? leading,
+    double elevation = 3,
+  }) {
+    return AppBar(
+      title: Text(title),
+      actions: actions,
+      automaticallyImplyLeading: automaticallyImplyLeading ?? true,
+      leading: leading,
+      elevation: elevation,
+      flexibleSpace: Container(
+        decoration: const BoxDecoration(
+          gradient: AppColors.primaryGradient,
+          borderRadius: BorderRadius.vertical(bottom: Radius.circular(12)),
+        ),
+      ),
+    );
+  }
+
+  // ✅ AppBar com ícone de deletar destacado
+  static AppBar createGradientAppBarWithDelete({
+    required String title,
+    required VoidCallback onDelete,
+    bool isDeleting = false,
+    bool showDelete = true,
+    List<Widget>? additionalActions,
+    bool? automaticallyImplyLeading = true,
+    Widget? leading,
+  }) {
+    return AppBar(
+      title: Text(title),
+      automaticallyImplyLeading: automaticallyImplyLeading ?? true,
+      leading: leading,
+      flexibleSpace: Container(
+        decoration: const BoxDecoration(
+          gradient: AppColors.primaryGradient,
+          borderRadius: BorderRadius.vertical(bottom: Radius.circular(12)),
+        ),
+      ),
+      actions: [
+        if (additionalActions != null) ...additionalActions,
+        if (showDelete) ...[
+          IconButton(
+            icon: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: isDeleting
+                    ? Colors.white.withOpacity(0.2)
+                    : Colors.white.withOpacity(0.1),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isDeleting
+                      ? Colors.white.withOpacity(0.3)
+                      : Colors.white.withOpacity(0.5),
+                  width: 1,
+                ),
+              ),
+              child: Icon(
+                Icons.delete_outline,
+                color: isDeleting ? Colors.white54 : Colors.white,
+                size: 20,
+              ),
+            ),
+            onPressed: isDeleting ? null : onDelete,
+            tooltip: 'Excluir',
+          ),
+          const SizedBox(width: 8),
+        ],
+      ],
+    );
+  }
+
+  // ✅ AppBar sem botão de voltar
+  static AppBar createGradientAppBarNoBack({
+    required String title,
+    List<Widget>? actions,
+    double elevation = 3,
+  }) {
+    return AppBar(
+      title: Text(title),
+      automaticallyImplyLeading: false,
+      actions: actions,
+      elevation: elevation,
+      flexibleSpace: Container(
+        decoration: const BoxDecoration(
+          gradient: AppColors.primaryGradient,
+          borderRadius: BorderRadius.vertical(bottom: Radius.circular(12)),
+        ),
+      ),
+    );
+  }
+
+  // ✅ AppBar simples para telas básicas
+  static AppBar createSimpleGradientAppBar({
+    required String title,
+    List<Widget>? actions,
+  }) {
+    return AppBar(
+      title: Text(title),
+      actions: actions,
+      flexibleSpace: Container(
+        decoration: const BoxDecoration(gradient: AppColors.primaryGradient),
+      ),
     );
   }
 }

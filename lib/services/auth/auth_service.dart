@@ -115,6 +115,7 @@ class AuthService {
       dataCriacao: DateTime.now(),
       ativo: true,
       emailVerificado: user.emailVerified,
+      isAdmin: false,
     );
   }
 
@@ -143,6 +144,7 @@ class AuthService {
         dataCriacao: DateTime.now(),
         ativo: true,
         emailVerificado: user.emailVerified,
+        isAdmin: false,
       );
 
       print('💾 [SERVICE] Salvando usuário no Firestore...');
@@ -197,6 +199,7 @@ class AuthService {
           dataCriacao: DateTime.now(),
           ativo: true,
           emailVerificado: false,
+          isAdmin: false,
         );
 
         await _firestoreService.saveUser(novoUsuario);

@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:projeto_padrao/core/themes/app_colors.dart';
+import 'package:projeto_padrao/core/themes/app_theme.dart';
+import 'package:projeto_padrao/models/usuario.dart';
+import 'package:projeto_padrao/widgets/permission_widget.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/auth/auth_controller.dart';
 import '../../routes/app_routes.dart';
 import '../../app/app_widget.dart';
+import '../../enums/permissao_usuario.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -38,29 +43,72 @@ class _HomePageState extends State<HomePage> {
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          authController.usuarioLogado != null
-              ? 'Olá, ${authController.usuarioLogado!.nome}!'
-              : 'Página Home',
-        ),
-        backgroundColor: Colors.blue,
+      appBar: AppTheme.createGradientAppBar(
+        title: authController.usuarioLogado != null
+            ? 'Olá, ${authController.usuarioLogado!.nome.split(' ').first}!'
+            : 'Página Home',
         actions: [
-          // Menu de usuário
           PopupMenuButton<String>(
-            icon: Icon(Icons.account_circle),
+            icon: authController.usuarioLogado?.fotoUrl != null
+                ? CircleAvatar(
+                    backgroundImage: NetworkImage(
+                      authController.usuarioLogado!.fotoUrl!,
+                    ),
+                    radius: 16,
+                  )
+                : Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.3),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.person_outline,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
             onSelected: (value) {
               _handleMenuSelection(value, authController, context);
             },
             itemBuilder: (BuildContext context) {
               return [
+                // Header com informações do usuário
+                PopupMenuItem(
+                  value: 'header',
+                  enabled: false,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        authController.usuarioLogado?.nome ?? 'Usuário',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      Text(
+                        authController.usuarioLogado?.email ?? '',
+                        style: TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const PopupMenuDivider(),
                 PopupMenuItem(
                   value: 'profile',
                   child: Row(
                     children: [
-                      Icon(Icons.person, color: Colors.blue),
-                      SizedBox(width: 8),
-                      Text('Meu Perfil'),
+                      Icon(Icons.person, color: AppColors.primary),
+                      const SizedBox(width: 8),
+                      const Text('Meu Perfil'),
                     ],
                   ),
                 ),
@@ -68,20 +116,20 @@ class _HomePageState extends State<HomePage> {
                   value: 'settings',
                   child: Row(
                     children: [
-                      Icon(Icons.settings, color: Colors.grey),
-                      SizedBox(width: 8),
-                      Text('Configurações'),
+                      Icon(Icons.settings, color: AppColors.secondary),
+                      const SizedBox(width: 8),
+                      const Text('Configurações'),
                     ],
                   ),
                 ),
-                PopupMenuDivider(),
+                const PopupMenuDivider(),
                 PopupMenuItem(
                   value: 'logout',
                   child: Row(
                     children: [
-                      Icon(Icons.logout, color: Colors.red),
-                      SizedBox(width: 8),
-                      Text('Sair'),
+                      Icon(Icons.logout, color: AppColors.error),
+                      const SizedBox(width: 8),
+                      const Text('Sair'),
                     ],
                   ),
                 ),
@@ -92,12 +140,14 @@ class _HomePageState extends State<HomePage> {
       ),
       body: _buildBody(authController),
       floatingActionButton: _buildFloatingActionButton(authController),
-      drawer: _buildDrawer(authController), // ✅ Drawer adicionado
+      drawer: _buildDrawer(authController),
     );
   }
 
-  // ✅ DRAWER COM MENU DE NAVEGAÇÃO
+  // ✅ DRAWER COM VALIDAÇÃO DE PERMISSÕES
   Widget _buildDrawer(AuthController authController) {
+    final usuario = authController.usuarioLogado;
+
     return Drawer(
       child: ListView(
         padding: EdgeInsets.zero,
@@ -122,7 +172,7 @@ class _HomePageState extends State<HomePage> {
                 ),
                 SizedBox(height: 10),
                 Text(
-                  authController.usuarioLogado?.nome ?? 'Usuário',
+                  usuario?.nome ?? 'Usuário',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 18,
@@ -131,7 +181,7 @@ class _HomePageState extends State<HomePage> {
                 ),
                 SizedBox(height: 4),
                 Text(
-                  authController.usuarioLogado?.email ?? '',
+                  usuario?.email ?? '',
                   style: TextStyle(color: Colors.white70, fontSize: 14),
                 ),
                 SizedBox(height: 4),
@@ -142,7 +192,7 @@ class _HomePageState extends State<HomePage> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    authController.usuarioLogado?.perfil.nome ?? 'Perfil',
+                    usuario?.perfil.nome ?? 'Perfil',
                     style: TextStyle(color: Colors.white, fontSize: 12),
                   ),
                 ),
@@ -150,47 +200,59 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
 
-          // ✅ SEÇÃO: GESTÃO DO SISTEMA
-          _buildDrawerSection(
-            title: 'GESTÃO DO SISTEMA',
-            children: [
-              _buildDrawerItem(
-                icon: Icons.people,
-                title: 'Gerenciar Usuários',
-                subtitle: 'Cadastrar e editar usuários',
-                onTap: () {
-                  Navigator.pop(context); // Fecha o drawer
-                  AppPages.navigateTo(context, AppRoutes.users);
-                },
-                badge: 'Admin',
-              ),
-              _buildDrawerItem(
-                icon: Icons.manage_accounts,
-                title: 'Gerenciar Perfis',
-                subtitle: 'Configurar perfis e permissões',
-                onTap: () {
-                  Navigator.pop(context);
-                  AppPages.navigateTo(context, AppRoutes.profiles);
-                },
-                badge: 'Admin',
-              ),
-            ],
+          // ✅ SEÇÃO: GESTÃO DO SISTEMA (APENAS ADMIN)
+          AdminOnlyWidget(
+            usuario: usuario,
+            child: _buildDrawerSection(
+              title: 'GESTÃO DO SISTEMA',
+              children: [
+                _buildDrawerItem(
+                  icon: Icons.people,
+                  title: 'Gerenciar Usuários',
+                  subtitle: 'Cadastrar e editar usuários',
+                  onTap: () {
+                    Navigator.pop(context);
+                    AppPages.navigateTo(context, AppRoutes.users);
+                  },
+                  badge: 'Admin',
+                ),
+                _buildDrawerItem(
+                  icon: Icons.manage_accounts,
+                  title: 'Gerenciar Perfis',
+                  subtitle: 'Configurar perfis e permissões',
+                  onTap: () {
+                    Navigator.pop(context);
+                    AppPages.navigateTo(context, AppRoutes.profiles);
+                  },
+                  badge: 'Admin',
+                ),
+              ],
+            ),
           ),
 
           // ✅ SEÇÃO: OPERACIONAL
           _buildDrawerSection(
             title: 'OPERACIONAL',
             children: [
-              _buildDrawerItem(
-                icon: Icons.shopping_cart,
-                title: 'Pedidos',
-                subtitle: 'Gerenciar pedidos',
-                onTap: () {
-                  Navigator.pop(context);
-                  // AppPages.navigateTo(context, AppRoutes.orders);
-                  _showEmDesenvolvimento('Pedidos');
-                },
-                badge: 'Pedidos',
+              // Botão de Pedidos - apenas para quem tem permissão
+              AnyPermissionWidget(
+                usuario: usuario,
+                permissoes: [
+                  PermissaoUsuario.cadastrarPedidos,
+                  PermissaoUsuario.editarPedidos,
+                  PermissaoUsuario.visualizarCadastro,
+                ],
+                child: _buildDrawerItem(
+                  icon: Icons.shopping_cart,
+                  title: 'Pedidos',
+                  subtitle: 'Gerenciar pedidos',
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showEmDesenvolvimento('Pedidos');
+                  },
+                  badge: 'Pedidos',
+                ),
+                fallback: const SizedBox.shrink(),
               ),
               _buildDrawerItem(
                 icon: Icons.people_outline,
@@ -198,44 +260,58 @@ class _HomePageState extends State<HomePage> {
                 subtitle: 'Gerenciar clientes',
                 onTap: () {
                   Navigator.pop(context);
-                  // AppPages.navigateTo(context, AppRoutes.customers);
                   _showEmDesenvolvimento('Clientes');
                 },
               ),
             ],
           ),
 
-          // ✅ SEÇÃO: RELATÓRIOS
-          _buildDrawerSection(
-            title: 'RELATÓRIOS',
-            children: [
-              _buildDrawerItem(
-                icon: Icons.analytics,
-                title: 'Relatórios',
-                subtitle: 'Relatórios do sistema',
-                onTap: () {
-                  Navigator.pop(context);
-                  // AppPages.navigateTo(context, AppRoutes.reports);
-                  _showEmDesenvolvimento('Relatórios');
-                },
-                badge: 'Relatórios',
-              ),
-            ],
+          // ✅ SEÇÃO: RELATÓRIOS (apenas para quem pode visualizar relatórios)
+          SinglePermissionWidget(
+            usuario: usuario,
+            permissao: PermissaoUsuario.visualizarRelatorios,
+            child: _buildDrawerSection(
+              title: 'RELATÓRIOS',
+              children: [
+                _buildDrawerItem(
+                  icon: Icons.analytics,
+                  title: 'Relatórios',
+                  subtitle: 'Relatórios do sistema',
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showEmDesenvolvimento('Relatórios');
+                  },
+                  badge: 'Relatórios',
+                ),
+              ],
+            ),
+            fallback: const SizedBox.shrink(),
           ),
 
-          // ✅ SEÇÃO: CONFIGURAÇÕES
+          // ✅ SEÇÃO: CONFIGURAÇÕES (apenas para administradores)
+          AdminOnlyWidget(
+            usuario: usuario,
+            child: _buildDrawerSection(
+              title: 'CONFIGURAÇÕES',
+              children: [
+                _buildDrawerItem(
+                  icon: Icons.settings,
+                  title: 'Configurações',
+                  subtitle: 'Configurações do sistema',
+                  onTap: () {
+                    Navigator.pop(context);
+                    _verConfiguracoes();
+                  },
+                ),
+              ],
+            ),
+            fallback: const SizedBox.shrink(),
+          ),
+
+          // ✅ SEÇÃO: AJUDA (disponível para todos)
           _buildDrawerSection(
-            title: 'CONFIGURAÇÕES',
+            title: 'SUPORTE',
             children: [
-              _buildDrawerItem(
-                icon: Icons.settings,
-                title: 'Configurações',
-                subtitle: 'Configurações do sistema',
-                onTap: () {
-                  Navigator.pop(context);
-                  _verConfiguracoes();
-                },
-              ),
               _buildDrawerItem(
                 icon: Icons.help,
                 title: 'Ajuda',
@@ -431,37 +507,61 @@ class _HomePageState extends State<HomePage> {
                     ],
                   ),
                   SizedBox(height: 16),
-                  // ✅ BOTÕES RÁPIDOS
+                  // ✅ BOTÕES RÁPIDOS COM PERMISSÕES
                   Wrap(
                     spacing: 12,
                     runSpacing: 12,
                     children: [
-                      _buildQuickActionButton(
-                        icon: Icons.people,
-                        label: 'Usuários',
-                        onTap: () =>
-                            AppPages.navigateTo(context, AppRoutes.users),
-                        color: Colors.green,
-                      ),
-                      _buildQuickActionButton(
-                        icon: Icons.manage_accounts,
-                        label: 'Perfis',
-                        onTap: () =>
-                            AppPages.navigateTo(context, AppRoutes.profiles),
-                        color: Colors.purple,
+                      // Botão Usuários - apenas Admin
+                      AdminOnlyWidget(
+                        usuario: usuario,
+                        child: _buildQuickActionButton(
+                          icon: Icons.people,
+                          label: 'Usuários',
+                          onTap: () =>
+                              AppPages.navigateTo(context, AppRoutes.users),
+                          color: Colors.green,
+                        ),
+                        fallback: const SizedBox.shrink(),
                       ),
 
-                      _buildQuickActionButton(
-                        icon: Icons.shopping_cart,
-                        label: 'Novo Pedido',
-                        onTap: () => _showEmDesenvolvimento('Novo Pedido'),
-                        color: Colors.orange,
+                      // Botão Perfis - apenas Admin
+                      AdminOnlyWidget(
+                        usuario: usuario,
+                        child: _buildQuickActionButton(
+                          icon: Icons.manage_accounts,
+                          label: 'Perfis',
+                          onTap: () =>
+                              AppPages.navigateTo(context, AppRoutes.profiles),
+                          color: Colors.purple,
+                        ),
+                        fallback: const SizedBox.shrink(),
                       ),
-                      _buildQuickActionButton(
-                        icon: Icons.analytics,
-                        label: 'Relatórios',
-                        onTap: () => _showEmDesenvolvimento('Relatórios'),
-                        color: Colors.red,
+
+                      // Botão Novo Pedido - apenas quem tem permissão
+                      SinglePermissionWidget(
+                        usuario: usuario,
+                        permissao: PermissaoUsuario.cadastrarPedidos,
+                        child: _buildQuickActionButton(
+                          icon: Icons.shopping_cart,
+                          label: 'Novo Pedido',
+                          onTap: () => _showEmDesenvolvimento('Novo Pedido'),
+                          color: Colors.orange,
+                        ),
+                        fallback: const SizedBox.shrink(),
+                      ),
+
+                      // Botão Relatórios - apenas quem pode visualizar
+                      SinglePermissionWidget(
+                        usuario: usuario,
+                        permissao: PermissaoUsuario.visualizarRelatorios,
+                        child: _buildQuickActionButton(
+                          icon: Icons.analytics,
+                          label: 'Relatórios',
+                          onTap: () => _showEmDesenvolvimento('Relatórios'),
+                          color: Colors.red,
+                        ),
+                        fallback: const SizedBox.shrink(),
                       ),
                     ],
                   ),
@@ -614,20 +714,32 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  // ✅ FLOATING ACTION BUTTON COM PERMISSÕES
   Widget? _buildFloatingActionButton(AuthController authController) {
     if (authController.usuarioLogado == null) return null;
 
-    return FloatingActionButton(
-      onPressed: () {
-        _showQuickActions(context);
-      },
-      backgroundColor: Colors.blue,
-      child: Icon(Icons.add, color: Colors.white),
+    final usuario = authController.usuarioLogado!;
+
+    // Mostra FAB apenas se o usuário tem alguma permissão de criação
+    return AnyPermissionWidget(
+      usuario: usuario,
+      permissoes: [
+        PermissaoUsuario.cadastrarPedidos,
+        PermissaoUsuario.administrarUsuarios,
+      ],
+      child: FloatingActionButton(
+        onPressed: () {
+          _showQuickActions(context, usuario);
+        },
+        backgroundColor: Colors.blue,
+        child: Icon(Icons.add, color: Colors.white),
+      ),
+      fallback: const SizedBox.shrink(),
     );
   }
 
-  // ✅ MENU DE AÇÕES RÁPIDAS DO FAB
-  void _showQuickActions(BuildContext context) {
+  // ✅ MENU DE AÇÕES RÁPIDAS DO FAB COM PERMISSÕES
+  void _showQuickActions(BuildContext context, Usuario usuario) {
     showModalBottomSheet(
       context: context,
       shape: RoundedRectangleBorder(
@@ -649,29 +761,47 @@ class _HomePageState extends State<HomePage> {
                 spacing: 12,
                 runSpacing: 12,
                 children: [
-                  _buildQuickActionItem(
-                    icon: Icons.person_add,
-                    label: 'Novo Usuário',
-                    onTap: () {
-                      Navigator.pop(context);
-                      AppPages.navigateTo(context, AppRoutes.userForm);
-                    },
+                  // Novo Usuário - apenas Admin
+                  AdminOnlyWidget(
+                    usuario: usuario,
+                    child: _buildQuickActionItem(
+                      icon: Icons.person_add,
+                      label: 'Novo Usuário',
+                      onTap: () {
+                        Navigator.pop(context);
+                        AppPages.navigateTo(context, AppRoutes.userForm);
+                      },
+                    ),
+                    fallback: const SizedBox.shrink(),
                   ),
-                  _buildQuickActionItem(
-                    icon: Icons.manage_accounts,
-                    label: 'Novo Perfil',
-                    onTap: () {
-                      Navigator.pop(context);
-                      AppPages.navigateTo(context, AppRoutes.profileForm);
-                    },
+
+                  // Novo Perfil - apenas Admin
+                  AdminOnlyWidget(
+                    usuario: usuario,
+                    child: _buildQuickActionItem(
+                      icon: Icons.manage_accounts,
+                      label: 'Novo Perfil',
+                      onTap: () {
+                        Navigator.pop(context);
+                        AppPages.navigateTo(context, AppRoutes.profileForm);
+                      },
+                    ),
+                    fallback: const SizedBox.shrink(),
                   ),
-                  _buildQuickActionItem(
-                    icon: Icons.shopping_cart,
-                    label: 'Novo Pedido',
-                    onTap: () {
-                      Navigator.pop(context);
-                      _showEmDesenvolvimento('Novo Pedido');
-                    },
+
+                  // Novo Pedido - apenas quem tem permissão
+                  SinglePermissionWidget(
+                    usuario: usuario,
+                    permissao: PermissaoUsuario.cadastrarPedidos,
+                    child: _buildQuickActionItem(
+                      icon: Icons.shopping_cart,
+                      label: 'Novo Pedido',
+                      onTap: () {
+                        Navigator.pop(context);
+                        _showEmDesenvolvimento('Novo Pedido');
+                      },
+                    ),
+                    fallback: const SizedBox.shrink(),
                   ),
                 ],
               ),

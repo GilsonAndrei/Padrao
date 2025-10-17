@@ -25,8 +25,9 @@ abstract class BaseController<T> with ChangeNotifier {
     notifyListeners();
   }
 
-  // Métodos abstratos que as classes filhas devem implementar
-  Future<void> loadItems();
+  // ✅ CORREÇÃO: Adicione o parâmetro reset opcional
+  Future<void> loadItems({bool reset = false});
+
   Future<bool> saveItem(T item);
   Future<bool> deleteItem(T item);
 

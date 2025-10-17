@@ -107,7 +107,7 @@ class AnyPermissionWidget extends StatelessWidget {
   }
 }
 
-// Widget específico para administradores
+// ✅ WIDGET ESPECÍFICO PARA ADMINISTRADORES (usando campo isAdmin)
 class AdminOnlyWidget extends StatelessWidget {
   final Usuario? usuario;
   final Widget child;
@@ -131,13 +131,13 @@ class AdminOnlyWidget extends StatelessWidget {
   }
 }
 
-// Widget para gerenciamento de pedidos
-class PedidoManagementWidget extends StatelessWidget {
+// ✅ NOVO: Widget para gerenciamento de usuários
+class UserManagementWidget extends StatelessWidget {
   final Usuario? usuario;
   final Widget child;
   final Widget? fallback;
 
-  const PedidoManagementWidget({
+  const UserManagementWidget({
     Key? key,
     required this.usuario,
     required this.child,
@@ -148,77 +148,83 @@ class PedidoManagementWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return PermissionWidget(
       usuario: usuario,
-      condition: (user) => PermissionChecker.podeGerenciarPedidos(user),
+      condition: (user) => PermissionChecker.podeGerenciarUsuarios(user),
       child: child,
       fallback: fallback,
     );
   }
 }
 
+// ✅ NOVO: Widget para visualização de relatórios
+class ReportsWidget extends StatelessWidget {
+  final Usuario? usuario;
+  final Widget child;
+  final Widget? fallback;
 
+  const ReportsWidget({
+    Key? key,
+    required this.usuario,
+    required this.child,
+    this.fallback,
+  }) : super(key: key);
 
+  @override
+  Widget build(BuildContext context) {
+    return PermissionWidget(
+      usuario: usuario,
+      condition: (user) => PermissionChecker.podeVisualizarRelatorios(user),
+      child: child,
+      fallback: fallback,
+    );
+  }
+}
 
-/*EXEMPLOS DE USO:
-// Exemplo 1: Botão que só aparece para quem pode cadastrar pedidos
-SinglePermissionWidget(
-  usuario: usuarioLogado,
-  permissao: PermissaoUsuario.cadastrarPedidos,
-  child: ElevatedButton(
-    onPressed: () => _cadastrarPedido(),
-    child: Text('Novo Pedido'),
-  ),
-  fallback: SizedBox.shrink(), // ou um Widget de "acesso negado"
-),
+// ✅ NOVO: Widget para configurações do sistema
+class SystemConfigWidget extends StatelessWidget {
+  final Usuario? usuario;
+  final Widget child;
+  final Widget? fallback;
 
-// Exemplo 2: Seção completa que requer múltiplas permissões
-AllPermissionsWidget(
-  usuario: usuarioLogado,
-  permissoes: [
-    PermissaoUsuario.visualizarCadastro,
-    PermissaoUsuario.cadastrarPedidos,
-  ],
-  child: Card(
-    child: Padding(
-      padding: EdgeInsets.all(16),
-      child: Column(
-        children: [
-          Text('Área de Vendas'),
-          // ... outros widgets
-        ],
-      ),
-    ),
-  ),
-),
+  const SystemConfigWidget({
+    Key? key,
+    required this.usuario,
+    required this.child,
+    this.fallback,
+  }) : super(key: key);
 
-// Exemplo 3: Menu que aparece para administradores
-AdminOnlyWidget(
-  usuario: usuarioLogado,
-  child: PopupMenuButton(
-    itemBuilder: (context) => [
-      PopupMenuItem(
-        child: Text('Gerenciar Usuários'),
-        onTap: () => _gerenciarUsuarios(),
-      ),
-    ],
-  ),
-),
+  @override
+  Widget build(BuildContext context) {
+    return PermissionWidget(
+      usuario: usuario,
+      condition: (user) => PermissionChecker.podeConfigurarSistema(user),
+      child: child,
+      fallback: fallback,
+    );
+  }
+}
 
-// Exemplo 4: Com fallback personalizado
-AnyPermissionWidget(
-  usuario: usuarioLogado,
-  permissoes: [
-    PermissaoUsuario.visualizarRelatorios,
-    PermissaoUsuario.administrarUsuarios,
-  ],
-  child: RelatoriosScreen(),
-  fallback: Center(
-    child: Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(Icons.block, size: 64, color: Colors.grey),
-        Text('Acesso não autorizado'),
-      ],
-    ),
-  ),
-),
- */
+// ✅ NOVO: Widget para acesso a rotas específicas
+class RouteAccessWidget extends StatelessWidget {
+  final Usuario? usuario;
+  final String rota;
+  final Widget child;
+  final Widget? fallback;
+
+  const RouteAccessWidget({
+    Key? key,
+    required this.usuario,
+    required this.rota,
+    required this.child,
+    this.fallback,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return PermissionWidget(
+      usuario: usuario,
+      condition: (user) => PermissionChecker.podeAcessarRota(user, rota),
+      child: child,
+      fallback: fallback,
+    );
+  }
+}

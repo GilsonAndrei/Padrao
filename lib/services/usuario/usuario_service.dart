@@ -77,6 +77,7 @@ class UsuarioService {
       ultimoAcesso: _timestampToDateTime(data['ultimoAcesso']),
       ativo: data['ativo'] ?? true,
       emailVerificado: data['emailVerificado'] ?? false,
+      isAdmin: false,
     );
   }
 

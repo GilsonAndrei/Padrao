@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
 import 'package:projeto_padrao/enums/permissao_usuario.dart';
 import 'package:projeto_padrao/models/perfil_usuario.dart';
 
@@ -14,6 +15,7 @@ class Usuario {
   final DateTime? ultimoAcesso;
   final bool ativo;
   final bool emailVerificado;
+  final bool isAdmin; // ✅ NOVO CAMPO: Identifica se é administrador
 
   Usuario({
     required this.id,
@@ -27,6 +29,7 @@ class Usuario {
     this.ultimoAcesso,
     required this.ativo,
     required this.emailVerificado,
+    required this.isAdmin, // ✅ NOVO PARÂMETRO
   });
 
   // Converte para Map
@@ -43,10 +46,11 @@ class Usuario {
       'ultimoAcesso': ultimoAcesso?.millisecondsSinceEpoch,
       'ativo': ativo,
       'emailVerificado': emailVerificado,
+      'isAdmin': isAdmin, // ✅ SALVA NO BANCO
     };
   }
 
-  // models/usuario.dart - ATUALIZE o fromMap:
+  // Factory fromMap atualizado
   factory Usuario.fromMap(Map<String, dynamic> map) {
     return Usuario(
       id: map['id']?.toString() ?? '',
@@ -64,10 +68,11 @@ class Usuario {
       ultimoAcesso: _parseDateTime(map['ultimoAcesso']),
       ativo: map['ativo'] ?? true,
       emailVerificado: map['emailVerificado'] ?? false,
+      isAdmin: map['isAdmin'] ?? false, // ✅ LÊ DO BANCO (default: false)
     );
   }
 
-  // ✅ ADICIONE este método auxiliar:
+  // Método auxiliar para parse de datas
   static DateTime _parseDateTime(dynamic date) {
     if (date == null) return DateTime.now();
     if (date is DateTime) return date;
@@ -90,6 +95,7 @@ class Usuario {
     DateTime? ultimoAcesso,
     bool? ativo,
     bool? emailVerificado,
+    bool? isAdmin, // ✅ NOVO PARÂMETRO NO COPYWITH
   }) {
     return Usuario(
       id: id ?? this.id,
@@ -103,6 +109,87 @@ class Usuario {
       ultimoAcesso: ultimoAcesso ?? this.ultimoAcesso,
       ativo: ativo ?? this.ativo,
       emailVerificado: emailVerificado ?? this.emailVerificado,
+      isAdmin: isAdmin ?? this.isAdmin, // ✅ COPIA O ISADMIN
     );
+  }
+
+  // ✅ MÉTODOS ÚTEIS PARA VERIFICAÇÃO DE PERMISSÕES
+
+  // Verifica se é administrador
+  bool get ehAdmin => isAdmin;
+
+  // Verifica se tem uma permissão específica
+  bool temPermissao(PermissaoUsuario permissao) {
+    // Se é admin, tem todas as permissões
+    if (isAdmin) return true;
+
+    // Caso contrário, verifica no perfil
+    return perfil.permissoes.contains(permissao);
+  }
+
+  // Verifica se tem todas as permissões da lista
+  bool temTodasPermissoes(List<PermissaoUsuario> permissoes) {
+    // Se é admin, tem todas as permissões
+    if (isAdmin) return true;
+
+    // Caso contrário, verifica se tem todas as permissões
+    for (final permissao in permissoes) {
+      if (!perfil.permissoes.contains(permissao)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  // Verifica se tem pelo menos uma permissão da lista
+  bool temAlgumaPermissao(List<PermissaoUsuario> permissoes) {
+    // Se é admin, tem todas as permissões
+    if (isAdmin) return true;
+
+    // Caso contrário, verifica se tem pelo menos uma
+    for (final permissao in permissoes) {
+      if (perfil.permissoes.contains(permissao)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Verifica se pode gerenciar pedidos
+  bool get podeGerenciarPedidos {
+    return temAlgumaPermissao([
+      PermissaoUsuario.cadastrarPedidos,
+      PermissaoUsuario.editarPedidos,
+      PermissaoUsuario.excluirPedidos,
+    ]);
+  }
+
+  // Verifica se pode visualizar relatórios
+  bool get podeVisualizarRelatorios {
+    return temAlgumaPermissao([
+      PermissaoUsuario.visualizarRelatorios,
+      PermissaoUsuario.relatorioVisualizar,
+    ]);
+  }
+
+  // Verifica se pode gerenciar usuários
+  bool get podeGerenciarUsuarios {
+    return temAlgumaPermissao([
+      PermissaoUsuario.administrarUsuarios,
+      PermissaoUsuario.usuarioVisualizar,
+      PermissaoUsuario.usuarioEditar,
+    ]);
+  }
+
+  // ✅ MÉTODO PARA EXIBIÇÃO NO DRAWER/HEADER
+  String get tipoUsuario {
+    if (isAdmin) return 'Administrador';
+    return perfil.nome;
+  }
+
+  // ✅ MÉTODO PARA COR DO BADGE
+  Color get corTipoUsuario {
+    if (isAdmin) return Colors.red;
+    return Colors.blue;
   }
 }

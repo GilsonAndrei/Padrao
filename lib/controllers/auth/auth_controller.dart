@@ -449,6 +449,7 @@ class AuthController with ChangeNotifier {
       dataCriacao: DateTime.now(),
       ativo: true,
       emailVerificado: false,
+      isAdmin: false,
     );
   }
 
