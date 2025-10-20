@@ -1,12 +1,15 @@
-// app/app_widget.dart - CORRIGIDO
+// app/app_widget.dart - SOLUÇÃO DEFINITIVA
 import 'package:flutter/material.dart';
 import 'package:projeto_padrao/controllers/perfil/perfil_controller.dart';
 import 'package:projeto_padrao/controllers/usuario/usuario_controller.dart';
 import 'package:projeto_padrao/core/themes/app_theme.dart';
 import 'package:projeto_padrao/firebase_options.dart';
 import 'package:projeto_padrao/routes/app_routes.dart';
+import 'package:projeto_padrao/services/notification/notification_service.dart';
+import 'package:projeto_padrao/services/notification/web_notification_service.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../controllers/auth/auth_controller.dart';
 
@@ -22,8 +25,8 @@ class _AppWidgetState extends State<AppWidget> {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  // 👇 CORREÇÃO: Controlar inicialização da sessão
   bool _sessionInitialized = false;
+  // ✅ REMOVIDO: Não instanciar serviços aqui
 
   @override
   Widget build(BuildContext context) {
@@ -46,42 +49,42 @@ class _AppWidgetState extends State<AppWidget> {
               ChangeNotifierProvider(create: (_) => AuthController()),
               ChangeNotifierProvider(create: (context) => UsuarioController()),
               ChangeNotifierProvider(create: (context) => PerfilController()),
+              // ✅ REMOVIDO: Não adicionar NotificationService no provider inicial
             ],
-            child: Builder(
-              // 👈 CORREÇÃO: Trocar Consumer por Builder
-              builder: (context) {
-                // 👇 CORREÇÃO: Inicializar apenas uma vez
-                if (!_sessionInitialized) {
-                  _sessionInitialized = true;
-                  final authController = Provider.of<AuthController>(
-                    context,
-                    listen: false,
-                  );
-
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    print('🚀 [APP] Inicializando sessão...');
-                    authController.inicializarSessao();
-                  });
-                }
-
-                return MaterialApp(
-                  title: 'Sistema Padrão',
-                  theme: AppTheme.lightTheme,
-                  debugShowCheckedModeBanner: false,
-                  initialRoute: AppRoutes.splash,
-                  onGenerateRoute: AppPages.generateRoute,
-                  navigatorKey: NavigationService.navigatorKey,
-                  builder: (context, child) {
-                    return GestureDetector(
-                      onTap: () {
-                        FocusScope.of(context).requestFocus(FocusNode());
-                      },
-                      child: child,
-                    );
-                  },
+            builder: (context, child) {
+              if (!_sessionInitialized) {
+                _sessionInitialized = true;
+                final authController = Provider.of<AuthController>(
+                  context,
+                  listen: false,
                 );
-              },
-            ),
+
+                WidgetsBinding.instance.addPostFrameCallback((_) async {
+                  print('🚀 [APP] Inicializando sessão...');
+                  authController.inicializarSessao();
+
+                  // ✅ INICIALIZAR NOTIFICAÇÕES APÓS TUDO ESTAR PRONTO
+                  _initializeNotifications(context);
+                });
+              }
+
+              return MaterialApp(
+                title: 'Sistema Padrão',
+                theme: AppTheme.lightTheme,
+                debugShowCheckedModeBanner: false,
+                initialRoute: AppRoutes.splash,
+                onGenerateRoute: AppPages.generateRoute,
+                navigatorKey: NavigationService.navigatorKey,
+                builder: (context, child) {
+                  return GestureDetector(
+                    onTap: () {
+                      FocusScope.of(context).requestFocus(FocusNode());
+                    },
+                    child: child,
+                  );
+                },
+              );
+            },
           );
         }
 
@@ -104,13 +107,38 @@ class _AppWidgetState extends State<AppWidget> {
       },
     );
   }
+
+  // ✅ MÉTODO SEPARADO PARA INICIALIZAR NOTIFICAÇÕES
+  Future<void> _initializeNotifications(BuildContext context) async {
+    try {
+      if (kIsWeb) {
+        print('🌐 Inicializando notificações WEB...');
+        // Web: inicializar apenas quando necessário
+        final webService = WebNotificationService();
+        await webService.initialize();
+
+        // Escutar notificações web
+        webService.notificationStream.listen((message) {
+          print('🌐 Notificação web: ${message['title']}');
+        });
+
+        print('✅ Notificações WEB inicializadas');
+      } else {
+        print('📱 Inicializando notificações MOBILE...');
+        // Mobile: inicializar normalmente
+        final notificationService = NotificationService();
+        await notificationService.initialize();
+        print('✅ Notificações MOBILE inicializadas');
+      }
+    } catch (e) {
+      print('❌ Erro ao inicializar notificações: $e');
+    }
+  }
 }
 
-// Serviço de Navegação Global
 class NavigationService {
   static final GlobalKey<NavigatorState> navigatorKey =
       GlobalKey<NavigatorState>();
-
   static BuildContext? get context => navigatorKey.currentContext;
 
   static Future<dynamic> navigateTo(String routeName, {Object? arguments}) {

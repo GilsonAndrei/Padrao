@@ -1,13 +1,20 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:projeto_padrao/core/themes/app_colors.dart';
 import 'package:projeto_padrao/core/themes/app_theme.dart';
 import 'package:projeto_padrao/models/usuario.dart';
+import 'package:projeto_padrao/views/notifications/notification_history_page.dart';
+import 'package:projeto_padrao/views/notifications/notifications_page.dart';
 import 'package:projeto_padrao/widgets/permission_widget.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/auth/auth_controller.dart';
 import '../../routes/app_routes.dart';
 import '../../app/app_widget.dart';
 import '../../enums/permissao_usuario.dart';
+import '../../services/notification/notification_service.dart';
+import '../../services/notification/web_notification_service.dart'; // ✅ NOVO
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -18,12 +25,98 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   @override
+  void initState() {
+    super.initState();
+    _setupNotificationListener();
+  }
+
+  void _setupNotificationListener() {
+    // ✅ CONDICIONAL: Web vs Mobile
+    if (kIsWeb) {
+      final webService = WebNotificationService();
+      webService.notificationStream.listen((message) {
+        _handleNotificationClick(message);
+      });
+    } else {
+      final notificationService = Provider.of<NotificationService>(
+        NavigationService.context!,
+        listen: false,
+      );
+
+      notificationService.notificationStream.listen((message) {
+        _handleNotificationClick(message);
+      });
+    }
+  }
+
+  /*void _handleWebNotificationClick(Map<String, dynamic> message) {
+    final type = message['data']?['type'] ?? message['type'];
+    final data = message['data'] ?? {};
+
+    print('🌐 Notificação WEB clicada: $type');
+
+    switch (type) {
+      case 'message':
+        _abrirTelaMensagem(data);
+        break;
+      case 'friend_request':
+        _abrirSolicitacoesAmizade(data);
+        break;
+      default:
+        _verNotificacoes();
+        break;
+    }
+  }*/
+
+  // ✅ SIMPLIFICADO: Um handler único
+  void _handleNotificationClick(dynamic message) {
+    print('🎯 Notificação clicada - Navegando para tela...');
+
+    // Navegar diretamente para a tela de notificações
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => NotificationsPage()),
+      );
+    });
+  }
+
+  // ✅ NOVOS MÉTODOS PARA ABRIR TELAS ESPECÍFICAS
+  void _abrirTelaMensagem(Map<String, dynamic> data) {
+    final chatId = data['chatId'];
+    if (chatId != null) {
+      // Navegar para tela de chat específico
+      _showEmDesenvolvimento('Chat: $chatId');
+    } else {
+      // Navegar para lista de mensagens
+      _showEmDesenvolvimento('Lista de Mensagens');
+    }
+  }
+
+  void _abrirSolicitacoesAmizade(Map<String, dynamic> data) {
+    final requestId = data['friendRequestId'];
+    if (requestId != null) {
+      // Navegar para detalhes da solicitação
+      _showEmDesenvolvimento('Solicitação: $requestId');
+    } else {
+      // Navegar para lista de solicitações
+      _showEmDesenvolvimento('Solicitações de Amizade');
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final authController = Provider.of<AuthController>(context);
 
-    // Verifica se usuário está realmente logado
+    // ✅ CONDICIONAL: Não usar Provider para NotificationService na Web
+    dynamic notificationService;
+    if (kIsWeb) {
+      notificationService = WebNotificationService();
+    } else {
+      notificationService = Provider.of<NotificationService>(context);
+    }
+
     if (authController.usuarioLogado == null && !authController.isLoading) {
-      // Se não está logado, redireciona para login
       WidgetsBinding.instance.addPostFrameCallback((_) {
         NavigationService.navigateReplacement(AppRoutes.login);
       });
@@ -48,6 +141,7 @@ class _HomePageState extends State<HomePage> {
             ? 'Olá, ${authController.usuarioLogado!.nome.split(' ').first}!'
             : 'Página Home',
         actions: [
+          _buildNotificationBadge(notificationService),
           PopupMenuButton<String>(
             icon: authController.usuarioLogado?.fotoUrl != null
                 ? CircleAvatar(
@@ -77,7 +171,6 @@ class _HomePageState extends State<HomePage> {
             },
             itemBuilder: (BuildContext context) {
               return [
-                // Header com informações do usuário
                 PopupMenuItem(
                   value: 'header',
                   enabled: false,
@@ -102,6 +195,18 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
                 const PopupMenuDivider(),
+                PopupMenuItem(
+                  value: 'notifications',
+                  child: Row(
+                    children: [
+                      Icon(Icons.notifications, color: Colors.orange),
+                      const SizedBox(width: 8),
+                      const Text('Notificações'),
+                      SizedBox(width: 8),
+                      _buildNotificationCount(notificationService),
+                    ],
+                  ),
+                ),
                 PopupMenuItem(
                   value: 'profile',
                   child: Row(
@@ -138,21 +243,159 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
       ),
-      body: _buildBody(authController),
+      body: _buildBody(authController, notificationService),
       floatingActionButton: _buildFloatingActionButton(authController),
-      drawer: _buildDrawer(authController),
+      drawer: _buildDrawer(authController, notificationService),
     );
   }
 
-  // ✅ DRAWER COM VALIDAÇÃO DE PERMISSÕES
-  Widget _buildDrawer(AuthController authController) {
+  // ✅ NOVO: Widget separado para contador de notificações
+  Widget _buildNotificationCount(dynamic notificationService) {
+    if (kIsWeb) {
+      final webService = notificationService as WebNotificationService;
+      return StreamBuilder<int>(
+        stream: webService.getUnreadCount(),
+        builder: (context, snapshot) {
+          final count = snapshot.data ?? 0;
+          if (count == 0) return SizedBox();
+
+          return Container(
+            padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.red,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              count > 9 ? '9+' : count.toString(),
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          );
+        },
+      );
+    } else {
+      final mobileService = notificationService as NotificationService;
+      return StreamBuilder<int>(
+        stream: mobileService.getUnreadCount(),
+        builder: (context, snapshot) {
+          final count = snapshot.data ?? 0;
+          if (count == 0) return SizedBox();
+
+          return Container(
+            padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.red,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              count > 9 ? '9+' : count.toString(),
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          );
+        },
+      );
+    }
+  }
+
+  Widget _buildNotificationBadge(dynamic notificationService) {
+    if (kIsWeb) {
+      final webService = notificationService as WebNotificationService;
+      return StreamBuilder<int>(
+        stream: webService.getUnreadCount(),
+        builder: (context, snapshot) {
+          final count = snapshot.data ?? 0;
+          return Stack(
+            children: [
+              IconButton(
+                icon: Icon(Icons.notifications),
+                onPressed: () => _verNotificacoes(),
+                tooltip: 'Notificações',
+              ),
+              if (count > 0)
+                Positioned(
+                  right: 8,
+                  top: 8,
+                  child: Container(
+                    padding: EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    constraints: BoxConstraints(minWidth: 16, minHeight: 16),
+                    child: Text(
+                      count > 99 ? '99+' : count.toString(),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
+      );
+    } else {
+      final mobileService = notificationService as NotificationService;
+      return StreamBuilder<int>(
+        stream: mobileService.getUnreadCount(),
+        builder: (context, snapshot) {
+          final count = snapshot.data ?? 0;
+          return Stack(
+            children: [
+              IconButton(
+                icon: Icon(Icons.notifications),
+                onPressed: () => _verNotificacoes(),
+                tooltip: 'Notificações',
+              ),
+              if (count > 0)
+                Positioned(
+                  right: 8,
+                  top: 8,
+                  child: Container(
+                    padding: EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    constraints: BoxConstraints(minWidth: 16, minHeight: 16),
+                    child: Text(
+                      count > 99 ? '99+' : count.toString(),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
+      );
+    }
+  }
+
+  Widget _buildDrawer(
+    AuthController authController,
+    dynamic notificationService,
+  ) {
     final usuario = authController.usuarioLogado;
 
     return Drawer(
       child: ListView(
         padding: EdgeInsets.zero,
         children: [
-          // ✅ HEADER DO DRAWER
           DrawerHeader(
             decoration: BoxDecoration(
               color: Colors.blue,
@@ -185,22 +428,59 @@ class _HomePageState extends State<HomePage> {
                   style: TextStyle(color: Colors.white70, fontSize: 14),
                 ),
                 SizedBox(height: 4),
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    usuario?.perfil.nome ?? 'Perfil',
-                    style: TextStyle(color: Colors.white, fontSize: 12),
-                  ),
-                ),
+                _buildDrawerNotificationCount(notificationService, usuario),
               ],
             ),
           ),
 
-          // ✅ SEÇÃO: GESTÃO DO SISTEMA (APENAS ADMIN)
+          _buildDrawerSection(
+            title: 'NOTIFICAÇÕES',
+            children: [
+              ListTile(
+                leading: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.notifications,
+                    color: Colors.blue,
+                    size: 20,
+                  ),
+                ),
+                title: Text(
+                  'Minhas Notificações',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                ),
+                subtitle: Text(
+                  'Ver todas as notificações',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                trailing: _buildDrawerNotificationBadge(notificationService),
+                onTap: () {
+                  Navigator.pop(context);
+                  _verNotificacoes();
+                },
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 4,
+                ),
+              ),
+
+              _buildDrawerItem(
+                icon: Icons.history,
+                title: 'Histórico',
+                subtitle: 'Histórico de notificações',
+                onTap: () {
+                  Navigator.pop(context);
+                  _verHistoricoNotificacoes();
+                },
+              ),
+            ],
+          ),
+
           AdminOnlyWidget(
             usuario: usuario,
             child: _buildDrawerSection(
@@ -230,11 +510,9 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
 
-          // ✅ SEÇÃO: OPERACIONAL
           _buildDrawerSection(
             title: 'OPERACIONAL',
             children: [
-              // Botão de Pedidos - apenas para quem tem permissão
               AnyPermissionWidget(
                 usuario: usuario,
                 permissoes: [
@@ -266,7 +544,6 @@ class _HomePageState extends State<HomePage> {
             ],
           ),
 
-          // ✅ SEÇÃO: RELATÓRIOS (apenas para quem pode visualizar relatórios)
           SinglePermissionWidget(
             usuario: usuario,
             permissao: PermissaoUsuario.visualizarRelatorios,
@@ -288,7 +565,6 @@ class _HomePageState extends State<HomePage> {
             fallback: const SizedBox.shrink(),
           ),
 
-          // ✅ SEÇÃO: CONFIGURAÇÕES (apenas para administradores)
           AdminOnlyWidget(
             usuario: usuario,
             child: _buildDrawerSection(
@@ -308,7 +584,6 @@ class _HomePageState extends State<HomePage> {
             fallback: const SizedBox.shrink(),
           ),
 
-          // ✅ SEÇÃO: AJUDA (disponível para todos)
           _buildDrawerSection(
             title: 'SUPORTE',
             children: [
@@ -324,7 +599,6 @@ class _HomePageState extends State<HomePage> {
             ],
           ),
 
-          // ✅ ESPAÇO FINAL
           SizedBox(height: 20),
           Divider(),
           Padding(
@@ -340,7 +614,149 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // ✅ SEÇÃO DO DRAWER
+  // ✅ NOVO: Widget para contador no drawer header
+  Widget _buildDrawerNotificationCount(
+    dynamic notificationService,
+    Usuario? usuario,
+  ) {
+    if (kIsWeb) {
+      final webService = notificationService as WebNotificationService;
+      return StreamBuilder<int>(
+        stream: webService.getUnreadCount(),
+        builder: (context, snapshot) {
+          final unreadCount = snapshot.data ?? 0;
+          return Row(
+            children: [
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  usuario?.perfil.nome ?? 'Perfil',
+                  style: TextStyle(color: Colors.white, fontSize: 12),
+                ),
+              ),
+              SizedBox(width: 8),
+              if (unreadCount > 0)
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.red,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '$unreadCount não lida${unreadCount > 1 ? 's' : ''}',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
+      );
+    } else {
+      final mobileService = notificationService as NotificationService;
+      return StreamBuilder<int>(
+        stream: mobileService.getUnreadCount(),
+        builder: (context, snapshot) {
+          final unreadCount = snapshot.data ?? 0;
+          return Row(
+            children: [
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  usuario?.perfil.nome ?? 'Perfil',
+                  style: TextStyle(color: Colors.white, fontSize: 12),
+                ),
+              ),
+              SizedBox(width: 8),
+              if (unreadCount > 0)
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.red,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '$unreadCount não lida${unreadCount > 1 ? 's' : ''}',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
+      );
+    }
+  }
+
+  // ✅ NOVO: Widget para badge no drawer item
+  Widget _buildDrawerNotificationBadge(dynamic notificationService) {
+    if (kIsWeb) {
+      final webService = notificationService as WebNotificationService;
+      return StreamBuilder<int>(
+        stream: webService.getUnreadCount(),
+        builder: (context, snapshot) {
+          final count = snapshot.data ?? 0;
+          if (count == 0) return SizedBox();
+
+          return Container(
+            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.orange.shade100,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              count.toString(),
+              style: TextStyle(
+                fontSize: 10,
+                color: Colors.orange.shade800,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          );
+        },
+      );
+    } else {
+      final mobileService = notificationService as NotificationService;
+      return StreamBuilder<int>(
+        stream: mobileService.getUnreadCount(),
+        builder: (context, snapshot) {
+          final count = snapshot.data ?? 0;
+          if (count == 0) return SizedBox();
+
+          return Container(
+            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.orange.shade100,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              count.toString(),
+              style: TextStyle(
+                fontSize: 10,
+                color: Colors.orange.shade800,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          );
+        },
+      );
+    }
+  }
+
   Widget _buildDrawerSection({
     required String title,
     required List<Widget> children,
@@ -365,7 +781,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // ✅ ITEM DO DRAWER
   Widget _buildDrawerItem({
     required IconData icon,
     required String title,
@@ -413,7 +828,10 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildBody(AuthController authController) {
+  Widget _buildBody(
+    AuthController authController,
+    dynamic notificationService,
+  ) {
     if (authController.isLoading) {
       return Center(
         child: Column(
@@ -457,7 +875,8 @@ class _HomePageState extends State<HomePage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ✅ CARD DE BOAS-VINDAS
+          _buildNotificationsQuickCard(notificationService, usuario),
+
           Card(
             elevation: 4,
             margin: EdgeInsets.only(bottom: 20),
@@ -507,12 +926,10 @@ class _HomePageState extends State<HomePage> {
                     ],
                   ),
                   SizedBox(height: 16),
-                  // ✅ BOTÕES RÁPIDOS COM PERMISSÕES
                   Wrap(
                     spacing: 12,
                     runSpacing: 12,
                     children: [
-                      // Botão Usuários - apenas Admin
                       AdminOnlyWidget(
                         usuario: usuario,
                         child: _buildQuickActionButton(
@@ -525,7 +942,6 @@ class _HomePageState extends State<HomePage> {
                         fallback: const SizedBox.shrink(),
                       ),
 
-                      // Botão Perfis - apenas Admin
                       AdminOnlyWidget(
                         usuario: usuario,
                         child: _buildQuickActionButton(
@@ -538,7 +954,13 @@ class _HomePageState extends State<HomePage> {
                         fallback: const SizedBox.shrink(),
                       ),
 
-                      // Botão Novo Pedido - apenas quem tem permissão
+                      _buildQuickActionButton(
+                        icon: Icons.notifications,
+                        label: 'Notificações',
+                        onTap: _verNotificacoes,
+                        color: Colors.orange,
+                      ),
+
                       SinglePermissionWidget(
                         usuario: usuario,
                         permissao: PermissaoUsuario.cadastrarPedidos,
@@ -551,7 +973,6 @@ class _HomePageState extends State<HomePage> {
                         fallback: const SizedBox.shrink(),
                       ),
 
-                      // Botão Relatórios - apenas quem pode visualizar
                       SinglePermissionWidget(
                         usuario: usuario,
                         permissao: PermissaoUsuario.visualizarRelatorios,
@@ -570,7 +991,6 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
 
-          // ✅ INFORMACOES DO USUÁRIO
           Card(
             elevation: 3,
             margin: EdgeInsets.only(bottom: 16),
@@ -600,7 +1020,6 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
 
-          // ✅ PERMISSÕES DO USUÁRIO
           Card(
             elevation: 3,
             margin: EdgeInsets.only(bottom: 16),
@@ -652,7 +1071,91 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // ✅ BOTÃO DE AÇÃO RÁPIDA
+  Widget _buildNotificationsQuickCard(
+    dynamic notificationService,
+    Usuario usuario,
+  ) {
+    if (kIsWeb) {
+      final webService = notificationService as WebNotificationService;
+      return StreamBuilder<int>(
+        stream: webService.getUnreadCount(),
+        builder: (context, snapshot) {
+          final unreadCount = snapshot.data ?? 0;
+          return _buildQuickCardContent(unreadCount);
+        },
+      );
+    } else {
+      final mobileService = notificationService as NotificationService;
+      return StreamBuilder<int>(
+        stream: mobileService.getUnreadCount(),
+        builder: (context, snapshot) {
+          final unreadCount = snapshot.data ?? 0;
+          return _buildQuickCardContent(unreadCount);
+        },
+      );
+    }
+  }
+
+  Widget _buildQuickCardContent(int unreadCount) {
+    return Card(
+      elevation: 4,
+      margin: EdgeInsets.only(bottom: 16),
+      color: unreadCount > 0 ? Colors.orange.shade50 : Colors.grey.shade50,
+      child: InkWell(
+        onTap: _verNotificacoes, // ✅ TORNAR CLICÁVEL
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Icon(
+                Icons.notifications,
+                color: unreadCount > 0 ? Colors.orange : Colors.grey,
+                size: 32,
+              ),
+              SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      unreadCount > 0
+                          ? 'Você tem $unreadCount notificação${unreadCount > 1 ? 'es' : ''} não lida${unreadCount > 1 ? 's' : ''}'
+                          : 'Nenhuma notificação nova',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w500,
+                        color: unreadCount > 0
+                            ? Colors.orange.shade800
+                            : Colors.grey.shade700,
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      unreadCount > 0
+                          ? 'Toque para ver as novidades'
+                          : 'Todas as notificações estão em dia',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: unreadCount > 0
+                            ? Colors.orange.shade600
+                            : Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (unreadCount > 0)
+                IconButton(
+                  icon: Icon(Icons.arrow_forward, color: Colors.orange),
+                  onPressed: _verNotificacoes,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildQuickActionButton({
     required IconData icon,
     required String label,
@@ -714,13 +1217,11 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // ✅ FLOATING ACTION BUTTON COM PERMISSÕES
   Widget? _buildFloatingActionButton(AuthController authController) {
     if (authController.usuarioLogado == null) return null;
 
     final usuario = authController.usuarioLogado!;
 
-    // Mostra FAB apenas se o usuário tem alguma permissão de criação
     return AnyPermissionWidget(
       usuario: usuario,
       permissoes: [
@@ -729,6 +1230,11 @@ class _HomePageState extends State<HomePage> {
       ],
       child: FloatingActionButton(
         onPressed: () {
+          if (kIsWeb) {
+            final webService = WebNotificationService();
+            webService.debugNotificationSystem();
+          }
+          enviarNotificacaoParaMim();
           _showQuickActions(context, usuario);
         },
         backgroundColor: Colors.blue,
@@ -738,7 +1244,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // ✅ MENU DE AÇÕES RÁPIDAS DO FAB COM PERMISSÕES
   void _showQuickActions(BuildContext context, Usuario usuario) {
     showModalBottomSheet(
       context: context,
@@ -761,7 +1266,6 @@ class _HomePageState extends State<HomePage> {
                 spacing: 12,
                 runSpacing: 12,
                 children: [
-                  // Novo Usuário - apenas Admin
                   AdminOnlyWidget(
                     usuario: usuario,
                     child: _buildQuickActionItem(
@@ -775,7 +1279,6 @@ class _HomePageState extends State<HomePage> {
                     fallback: const SizedBox.shrink(),
                   ),
 
-                  // Novo Perfil - apenas Admin
                   AdminOnlyWidget(
                     usuario: usuario,
                     child: _buildQuickActionItem(
@@ -789,7 +1292,19 @@ class _HomePageState extends State<HomePage> {
                     fallback: const SizedBox.shrink(),
                   ),
 
-                  // Novo Pedido - apenas quem tem permissão
+                  AdminOnlyWidget(
+                    usuario: usuario,
+                    child: _buildQuickActionItem(
+                      icon: Icons.notification_add,
+                      label: 'Enviar Notif.',
+                      onTap: () {
+                        Navigator.pop(context);
+                        _enviarNotificacaoTeste();
+                      },
+                    ),
+                    fallback: const SizedBox.shrink(),
+                  ),
+
                   SinglePermissionWidget(
                     usuario: usuario,
                     permissao: PermissaoUsuario.cadastrarPedidos,
@@ -844,7 +1359,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // ✅ CORES PARA PERMISSÕES
   Color _getPermissionColor(dynamic permissao) {
     final permissaoStr = permissao.toString();
     if (permissaoStr.contains('ADMIN') || permissaoStr.contains('CONFIGURAR')) {
@@ -865,6 +1379,9 @@ class _HomePageState extends State<HomePage> {
     BuildContext context,
   ) {
     switch (value) {
+      case 'notifications':
+        _verNotificacoes();
+        break;
       case 'profile':
         _verPerfil();
         break;
@@ -886,6 +1403,24 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  void _verNotificacoes() {
+    // ❌ ANTIGO: _showEmDesenvolvimento('Tela de Notificações');
+    // ✅ NOVO: Navegar para tela real
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => NotificationsPage()),
+    );
+  }
+
+  void _verHistoricoNotificacoes() {
+    // ❌ ANTIGO: _showEmDesenvolvimento('Histórico de Notificações');
+    // ✅ NOVO: Navegar para tela real
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => NotificationHistoryPage()),
+    );
+  }
+
   void _verPerfil() {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -902,6 +1437,42 @@ class _HomePageState extends State<HomePage> {
         duration: Duration(seconds: 2),
       ),
     );
+  }
+
+  void _enviarNotificacaoTeste() {
+    _showEmDesenvolvimento('Envio de Notificação');
+  }
+
+  void testarNotificacaoReal() async {
+    final notificationService = NotificationService();
+
+    final resultado = await notificationService.sendNotification(
+      toUserId: "ZKLlr1X8BuVI2AywmlqdTAEsEWh1", // Seu user ID
+      title: "Notificação REAL do Firebase 🚀",
+      message: "Esta é uma notificação PUSH real enviada via FCM!",
+      type: "system",
+      data: {"test": "real", "timestamp": DateTime.now().toString()},
+    );
+
+    print('📤 Resultado notificação real: $resultado');
+  }
+
+  void enviarNotificacaoParaMim() async {
+    print("AAAAAAAAAAAAAAAAAAA");
+    final notificationService = NotificationService();
+    final currentUser = FirebaseAuth.instance.currentUser;
+
+    if (currentUser != null) {
+      final resultado = await notificationService.sendNotification(
+        toUserId: currentUser.uid, // Enviar para si mesmo
+        title: "Teste Personalizado 🧪",
+        message: "Funcionando perfeitamente! ✅",
+        type: "system",
+        data: {"test": true},
+      );
+
+      print('Resultado: $resultado');
+    }
   }
 
   void _confirmarLogout(AuthController authController, BuildContext context) {
