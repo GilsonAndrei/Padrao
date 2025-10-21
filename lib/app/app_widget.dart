@@ -1,4 +1,5 @@
 // app/app_widget.dart - SOLUÇÃO DEFINITIVA
+import 'dart:js_util' as js_util;
 import 'package:flutter/material.dart';
 import 'package:projeto_padrao/controllers/perfil/perfil_controller.dart';
 import 'package:projeto_padrao/controllers/usuario/usuario_controller.dart';
@@ -7,9 +8,11 @@ import 'package:projeto_padrao/firebase_options.dart';
 import 'package:projeto_padrao/routes/app_routes.dart';
 import 'package:projeto_padrao/services/notification/notification_service.dart';
 import 'package:projeto_padrao/services/notification/web_notification_service.dart';
+import 'package:projeto_padrao/views/notifications/notifications_page.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:web/web.dart' as html;
 
 import '../controllers/auth/auth_controller.dart';
 
@@ -24,6 +27,11 @@ class _AppWidgetState extends State<AppWidget> {
   final Future<FirebaseApp> _initialization = Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  @override
+  void initState() {
+    super.initState();
+    _setupServiceWorkerListener(); // ✅ Configura listener para receber eventos do Service Worker
+  }
 
   bool _sessionInitialized = false;
   // ✅ REMOVIDO: Não instanciar serviços aqui
@@ -110,28 +118,10 @@ class _AppWidgetState extends State<AppWidget> {
 
   // ✅ MÉTODO SEPARADO PARA INICIALIZAR NOTIFICAÇÕES
   Future<void> _initializeNotifications(BuildContext context) async {
-    try {
-      if (kIsWeb) {
-        print('🌐 Inicializando notificações WEB...');
-        // Web: inicializar apenas quando necessário
-        final webService = WebNotificationService();
-        await webService.initialize();
-
-        // Escutar notificações web
-        webService.notificationStream.listen((message) {
-          print('🌐 Notificação web: ${message['title']}');
-        });
-
-        print('✅ Notificações WEB inicializadas');
-      } else {
-        print('📱 Inicializando notificações MOBILE...');
-        // Mobile: inicializar normalmente
-        final notificationService = NotificationService();
-        await notificationService.initialize();
-        print('✅ Notificações MOBILE inicializadas');
-      }
-    } catch (e) {
-      print('❌ Erro ao inicializar notificações: $e');
+    if (kIsWeb) {
+      await WebNotificationService().initialize();
+    } else {
+      await NotificationService().initialize();
     }
   }
 }
@@ -162,3 +152,76 @@ class NavigationService {
     return navigatorKey.currentState!.pop();
   }
 }
+
+void _setupServiceWorkerListener() {
+  if (kIsWeb) {
+    try {
+      html.window.addEventListener(
+        'message',
+        (event) {
+              final dynamic data = js_util.getProperty(event, 'data');
+              if (data != null &&
+                  data is Map &&
+                  data['type'] == 'NAVIGATE_TO_NOTIFICATIONS') {
+                print(
+                  '🌐 [APP] Recebido NAVIGATE_TO_NOTIFICATIONS do Service Worker',
+                );
+
+                final context = NavigationService.context;
+                if (context != null) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => NotificationsPage()),
+                    );
+                  });
+                } else {
+                  print('⚠️ Contexto de navegação não disponível');
+                }
+              }
+            }
+            as html.EventListener?,
+      );
+
+      print('✅ Listener do Service Worker configurado');
+    } catch (e) {
+      print('❌ Erro ao configurar listener do Service Worker: $e');
+    }
+  }
+}
+
+/*void _setupServiceWorkerListener() {
+  if (kIsWeb) {
+    try {
+      // Ouvinte para mensagens do Service Worker
+      html.window.addEventListener(
+        'message',
+        (event) {
+              final data = event.data;
+              if (data is Map && data['type'] == 'NOTIFICATION_CLICK') {
+                print(
+                  '🌐 [APP] Mensagem do Service Worker recebida: ${data['data']}',
+                );
+
+                // Navegar para a página de notificações
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (NavigationService.context != null) {
+                    Navigator.push(
+                      NavigationService.context!,
+                      MaterialPageRoute(
+                        builder: (context) => NotificationsPage(),
+                      ),
+                    );
+                  }
+                });
+              }
+            }
+            as html.EventListener?,
+      );
+
+      print('✅ Listener do Service Worker configurado');
+    } catch (e) {
+      print('❌ Erro ao configurar listener: $e');
+    }
+  }
+}*/

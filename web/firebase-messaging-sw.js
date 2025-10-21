@@ -1,8 +1,9 @@
-// web/firebase-messaging-sw.js
 importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js');
 
-// ✅ CONFIGURAÇÃO DO FIREBASE NO SERVICE WORKER
+console.log('🌐 [SW] Service Worker carregado');
+
+// 🔧 Inicialização
 firebase.initializeApp({
     apiKey: "AIzaSyAlgBYvyY2YfnpRilWC4AhBhHpVuGjhODo",
     authDomain: "padrao-210e0.firebaseapp.com",
@@ -14,48 +15,58 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// ✅ BACKGROUND MESSAGE HANDLER (CRÍTICO)
+// ✅ Recebe notificações em background
 messaging.onBackgroundMessage((payload) => {
-    console.log('🌐 [SW] Notificação em background recebida:', payload);
+    console.log('🌐 [SW] Notificação recebida (background):', payload);
 
     const notificationTitle = payload.notification?.title || 'Nova notificação';
     const notificationOptions = {
-        body: payload.notification?.body || '',
-        icon: '/icons/icon-192.png', // Use ícone local ou remoto
+        body: payload.notification?.body || 'Você recebeu uma nova mensagem.',
+        icon: '/icons/icon-192.png',
         badge: '/icons/icon-72.png',
-        data: payload.data || {},
-        tag: 'background-notification',
-        requireInteraction: true
+        data: {
+            click_action: payload.fcmOptions?.link || '/',
+            payloadData: payload.data || {}
+        },
     };
 
-    // Mostrar notificação
     return self.registration.showNotification(notificationTitle, notificationOptions);
 });
 
-// ✅ NOTIFICATION CLICK HANDLER
+// ✅ Captura clique na notificação
 self.addEventListener('notificationclick', (event) => {
-    console.log('🌐 [SW] Notificação clicada:', event.notification);
-
+    console.log('🌐 [SW] Notificação clicada');
     event.notification.close();
 
-    const notificationData = event.notification.data || {};
+    const targetUrl = event.notification.data?.click_action || '/';
 
-    // Focar na janela existente ou abrir nova
     event.waitUntil(
-        clients.matchAll({ type: 'window', includeUncontrolled: true })
-            .then((clientList) => {
-                // Tentar focar em janela existente
-                for (const client of clientList) {
-                    if (client.url.includes(self.location.origin) && 'focus' in client) {
-                        return client.focus();
-                    }
+        clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
+            // Se já tem aba aberta do app → foca nela
+            for (const client of clientList) {
+                if (client.url.includes(self.location.origin) && 'focus' in client) {
+                    console.log('🌐 [SW] Focando aba existente');
+                    client.focus();
+                    client.postMessage({
+                        type: 'NOTIFICATION_CLICK',
+                        data: event.notification.data?.payloadData || {}
+                    });
+                    return;
                 }
-
-                // Abrir nova janela se não existir
-                if (clients.openWindow) {
-                    const targetUrl = notificationData.route || '/';
-                    return clients.openWindow(targetUrl);
-                }
-            })
+            }
+            // Caso contrário → abre na mesma aba
+            console.log('🌐 [SW] Abrindo nova aba para:', targetUrl);
+            return clients.openWindow(targetUrl);
+        })
     );
+});
+
+self.addEventListener('install', (event) => {
+    console.log('🌐 [SW] Instalado');
+    self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+    console.log('🌐 [SW] Ativado');
+    event.waitUntil(self.clients.claim());
 });

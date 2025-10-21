@@ -31,22 +31,53 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _setupNotificationListener() {
-    // ✅ CONDICIONAL: Web vs Mobile
+    print("_setupNotificationListener");
     if (kIsWeb) {
       final webService = WebNotificationService();
       webService.notificationStream.listen((message) {
-        _handleNotificationClick(message);
-      });
-    } else {
-      final notificationService = Provider.of<NotificationService>(
-        NavigationService.context!,
-        listen: false,
-      );
+        final type = message['type'];
+        final title = message['title'];
 
-      notificationService.notificationStream.listen((message) {
-        _handleNotificationClick(message);
+        print('🌐 Notificação: $title - Tipo: $type');
+
+        if (type == 'clicked') {
+          print('🎯 Notificação REALMENTE clicada pelo usuário');
+          _handleNotificationClick(message);
+        } else if (type == 'foreground') {
+          print('📨 Notificação apenas recebida em foreground');
+          // Apenas mostrar algum indicador visual (badge, snackbar, etc.)
+          _showNotificationIndicator(message);
+        }
       });
     }
+  }
+
+  // ✅ APENAS MOSTRA INDICADOR VISUAL - SEM NAVEGAR
+  void _showNotificationIndicator(Map<String, dynamic> message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Nova notificação: ${message['title']}'),
+        duration: Duration(seconds: 3),
+      ),
+    );
+  }
+
+  // ✅ NAVEGA APENAS PARA CLIQUES REAIS
+  void _handleNotificationClick(Map<String, dynamic> message) {
+    print('🎯 Navegando para notificação clicada: ${message['title']}');
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => NotificationsPage()),
+    );
+  }
+
+  // ✅ APENAS MOSTRA NA UI - SEM NAVEGAR
+  void _showNotificationInUI(Map<String, dynamic> message) {
+    // Ex: mostrar snackbar, badge, etc.
+    print('📢 Nova notificação: ${message['title']}');
+
+    // ❌ NÃO navega automaticamente!
+    // Deixa o usuário decidir quando quer ver as notificações
   }
 
   /*void _handleWebNotificationClick(Map<String, dynamic> message) {
@@ -69,7 +100,7 @@ class _HomePageState extends State<HomePage> {
   }*/
 
   // ✅ SIMPLIFICADO: Um handler único
-  void _handleNotificationClick(dynamic message) {
+  /*void _handleNotificationClick(dynamic message) {
     print('🎯 Notificação clicada - Navegando para tela...');
 
     // Navegar diretamente para a tela de notificações
@@ -79,7 +110,7 @@ class _HomePageState extends State<HomePage> {
         MaterialPageRoute(builder: (context) => NotificationsPage()),
       );
     });
-  }
+  }*/
 
   // ✅ NOVOS MÉTODOS PARA ABRIR TELAS ESPECÍFICAS
   void _abrirTelaMensagem(Map<String, dynamic> data) {
@@ -1231,8 +1262,8 @@ class _HomePageState extends State<HomePage> {
       child: FloatingActionButton(
         onPressed: () {
           if (kIsWeb) {
-            final webService = WebNotificationService();
-            webService.debugNotificationSystem();
+            // final webService = WebNotificationService();
+            // webService.debugSendNotification();
           }
           enviarNotificacaoParaMim();
           _showQuickActions(context, usuario);
@@ -1458,6 +1489,8 @@ class _HomePageState extends State<HomePage> {
   }
 
   void enviarNotificacaoParaMim() async {
+    //final webService = WebNotificationService();
+    //webService.testNotification();
     print("AAAAAAAAAAAAAAAAAAA");
     final notificationService = NotificationService();
     final currentUser = FirebaseAuth.instance.currentUser;

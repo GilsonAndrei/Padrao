@@ -1,3 +1,4 @@
+
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
@@ -85,9 +86,12 @@ async function checkRateLimit(userId) {
 /**
  * Criar notificação - Função callable (ATUALIZADO PARA v2)
  */
+/**
+ * Criar notificação e ENVIAR FCM IMEDIATAMENTE - CORRIGIDA
+ */
 exports.createNotification = onCall(
   {
-    enforceAppCheck: false, // Opcional: habilitar se usar App Check
+    enforceAppCheck: false,
     cors: true,
   },
   async (request) => {
@@ -95,7 +99,6 @@ exports.createNotification = onCall(
     const startTime = Date.now();
     const functionName = "createNotification";
 
-    // Verificar autenticação
     if (!auth) {
       throw new HttpsError("unauthenticated", "Usuário não autenticado");
     }
@@ -119,9 +122,10 @@ exports.createNotification = onCall(
         additionalData = {},
         expiresIn,
         senderData,
+        platform = "web",
       } = data;
 
-      // Verificar se usuário destino existe na coleção 'usuarios'
+      // Verificar se usuário destino existe
       const userDoc = await admin.firestore()
         .collection("usuarios")
         .doc(toUserId)
@@ -133,12 +137,11 @@ exports.createNotification = onCall(
 
       const userData = userDoc.data();
 
-      // Verificar se usuário destino está ativo
       if (userData.ativo === false) {
         throw new HttpsError("failed-precondition", "Usuário destino está inativo");
       }
 
-      // USAR senderData se fornecido, senão buscar do Firestore
+      // Obter dados do remetente
       let fromUserData = senderData;
       if (!fromUserData) {
         const fromUserDoc = await admin.firestore()
@@ -156,7 +159,7 @@ exports.createNotification = onCall(
         expiresAt = new Date(Date.now() + NOTIFICATION_TTL_DAYS * 24 * 60 * 60 * 1000);
       }
 
-      // Criar notificação com estrutura compatível
+      // ✅ 1. CRIAR NOTIFICAÇÃO NO FIRESTORE
       const notificationData = {
         fromUserId: auth.uid,
         fromUserName: fromUserData.nome || auth.token?.name || "Usuário",
@@ -168,6 +171,7 @@ exports.createNotification = onCall(
         message: message,
         type: type,
         priority: priority,
+        platform: platform,
         read: false,
         clicked: false,
         expiresAt: admin.firestore.Timestamp.fromDate(expiresAt),
@@ -184,21 +188,127 @@ exports.createNotification = onCall(
         .collection("notifications")
         .add(notificationData);
 
-      console.log(`[${functionName}] Notificação criada com sucesso`, {
-        notificationId: notificationRef.id,
-        fromUserId: auth.uid,
-        toUserId: toUserId,
-        type: type,
+      const notificationId = notificationRef.id;
+
+      console.log(`[${functionName}] Notificação criada no Firestore`, {
+        notificationId: notificationId,
+      });
+
+      // ✅ 2. ENVIAR NOTIFICAÇÃO FCM (CORRIGIDO - APENAS STRINGS NO DATA)
+      const fcmToken = userData.fcmToken;
+
+      if (!fcmToken) {
+        console.warn(`[${functionName}] Usuário ${toUserId} não tem FCM token`);
+
+        await notificationRef.update({
+          status: "no_token",
+          sent: false,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        return {
+          success: true,
+          notificationId: notificationId,
+          message: "Notificação criada mas usuário não tem token FCM",
+          fcmSent: false,
+        };
+      }
+
+      // ✅ CORREÇÃO: CONVERTER TODOS OS VALORES DO DATA PARA STRING
+      const stringifiedAdditionalData = {};
+      if (additionalData) {
+        Object.keys(additionalData).forEach(key => {
+          const value = additionalData[key];
+          // Converter para string qualquer valor que não seja string
+          stringifiedAdditionalData[key] = typeof value === 'string' ? value : String(value);
+        });
+      }
+
+      // ✅ PAYLOAD FCM CORRETO (APENAS STRINGS NO DATA)
+      const payload = {
+        token: fcmToken,
+        notification: {
+          title: title,
+          body: message,
+        },
+        data: {
+          // ✅ APENAS STRINGS - CRÍTICO!
+          notificationId: notificationId,
+          type: type,
+          fromUserId: auth.uid,
+          fromUserName: String(fromUserData.nome || "Usuário"),
+          fromUserIsAdmin: String(fromUserData.isAdmin || false),
+          priority: priority,
+          //click_action: "FLUTTER_NOTIFICATION_CLICK",
+          route: _getNotificationRoute(type, additionalData),
+          timestamp: String(Date.now()),
+          // ✅ Dados adicionais convertidos para string
+          ...stringifiedAdditionalData,
+        },
+        webpush: {
+          headers: {
+            Urgency: priority === "high" ? "high" : "normal",
+          },
+          notification: {
+            icon: '/icons/icon-192.png',
+            badge: '/icons/icon-72.png',
+            requireInteraction: true,
+            actions: [
+              {
+                action: 'open',
+                title: 'Abrir App'
+              }
+            ]
+          },
+          fcmOptions: {
+            link: '/',
+          }
+        },
+        android: {
+          priority: priority === "high" ? "high" : "normal",
+        },
+        apns: {
+          payload: {
+            aps: {
+              badge: 1,
+              sound: "default",
+            },
+          },
+        },
+      };
+
+      console.log(`[${functionName}] Enviando FCM para web`, {
+        token: fcmToken.substring(0, 20) + '...',
+        platform: platform,
+      });
+
+      // ✅ ENVIAR VIA FCM
+      const fcmResponse = await admin.messaging().send(payload);
+
+      // ✅ ATUALIZAR NOTIFICAÇÃO
+      await notificationRef.update({
+        status: "sent",
+        sent: true,
+        fcmMessageId: fcmResponse,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      console.log(`[${functionName}] Notificação FCM enviada com sucesso`, {
+        notificationId: notificationId,
+        fcmMessageId: fcmResponse,
         duration: Date.now() - startTime,
       });
 
       return {
         success: true,
-        notificationId: notificationRef.id,
-        message: "Notificação criada com sucesso",
+        notificationId: notificationId,
+        message: "Notificação criada e enviada com sucesso",
+        fcmSent: true,
+        fcmMessageId: fcmResponse,
       };
+
     } catch (error) {
-      console.error(`[${functionName}] Erro ao criar notificação`, {
+      console.error(`[${functionName}] Erro ao criar/enviar notificação`, {
         error: error.message,
         userId: auth?.uid,
         duration: Date.now() - startTime,
@@ -209,6 +319,7 @@ exports.createNotification = onCall(
     }
   }
 );
+
 
 /**
  * Enviar notificação push quando uma notificação é criada (ATUALIZADO PARA v2)
@@ -273,7 +384,7 @@ exports.sendPushNotification = onDocumentCreated(
           fromUserName: notification.fromUserName,
           fromUserIsAdmin: notification.fromUserIsAdmin?.toString() || "false",
           priority: notification.priority,
-          click_action: "FLUTTER_NOTIFICATION_CLICK",
+          //click_action: "FLUTTER_NOTIFICATION_CLICK",
           route: _getNotificationRoute(notification.type, notification.data),
         },
         token: fcmToken,
@@ -321,6 +432,9 @@ exports.sendPushNotification = onDocumentCreated(
 /**
  * Helper para determinar a rota da notificação
  */
+/**
+ * Helper para determinar a rota da notificação (ATUALIZADO)
+ */
 function _getNotificationRoute(type, data) {
   switch (type) {
     case "message":
@@ -330,8 +444,10 @@ function _getNotificationRoute(type, data) {
     case "like":
     case "comment":
       return `/post/${data.postId || ""}`;
-    default:
+    case "general":
       return "/notifications";
+    default:
+      return "/"; // ✅ Padrão para web
   }
 }
 
