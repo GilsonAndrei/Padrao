@@ -1,5 +1,4 @@
-// app/app_widget.dart - SOLUÇÃO DEFINITIVA
-import 'dart:js_util' as js_util;
+// app/app_widget.dart
 import 'package:flutter/material.dart';
 import 'package:projeto_padrao/controllers/perfil/perfil_controller.dart';
 import 'package:projeto_padrao/controllers/usuario/usuario_controller.dart';
@@ -8,11 +7,9 @@ import 'package:projeto_padrao/firebase_options.dart';
 import 'package:projeto_padrao/routes/app_routes.dart';
 import 'package:projeto_padrao/services/notification/notification_service.dart';
 import 'package:projeto_padrao/services/notification/web_notification_service.dart';
-import 'package:projeto_padrao/views/notifications/notifications_page.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:web/web.dart' as html;
 
 import '../controllers/auth/auth_controller.dart';
 
@@ -27,14 +24,8 @@ class _AppWidgetState extends State<AppWidget> {
   final Future<FirebaseApp> _initialization = Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  @override
-  void initState() {
-    super.initState();
-    _setupServiceWorkerListener(); // ✅ Configura listener para receber eventos do Service Worker
-  }
 
   bool _sessionInitialized = false;
-  // ✅ REMOVIDO: Não instanciar serviços aqui
 
   @override
   Widget build(BuildContext context) {
@@ -57,7 +48,9 @@ class _AppWidgetState extends State<AppWidget> {
               ChangeNotifierProvider(create: (_) => AuthController()),
               ChangeNotifierProvider(create: (context) => UsuarioController()),
               ChangeNotifierProvider(create: (context) => PerfilController()),
-              // ✅ REMOVIDO: Não adicionar NotificationService no provider inicial
+              // ✅ ADICIONE ESTE PROVIDER PARA MOBILE
+              if (!kIsWeb)
+                ChangeNotifierProvider(create: (_) => NotificationService()),
             ],
             builder: (context, child) {
               if (!_sessionInitialized) {
@@ -121,7 +114,20 @@ class _AppWidgetState extends State<AppWidget> {
     if (kIsWeb) {
       await WebNotificationService().initialize();
     } else {
-      await NotificationService().initialize();
+      // ✅ AGUARDAR A INICIALIZAÇÃO COMPLETA DO FCM
+      await Future.delayed(Duration(seconds: 1));
+
+      final notificationService = Provider.of<NotificationService>(
+        context,
+        listen: false,
+      );
+
+      print('🚀 INICIALIZANDO NOTIFICATION SERVICE...');
+      await notificationService.initialize();
+
+      // ✅ TESTE AUTOMÁTICO APÓS INICIALIZAÇÃO
+      await Future.delayed(Duration(seconds: 2));
+      await notificationService.testNotificationNow();
     }
   }
 }
@@ -152,76 +158,3 @@ class NavigationService {
     return navigatorKey.currentState!.pop();
   }
 }
-
-void _setupServiceWorkerListener() {
-  if (kIsWeb) {
-    try {
-      html.window.addEventListener(
-        'message',
-        (event) {
-              final dynamic data = js_util.getProperty(event, 'data');
-              if (data != null &&
-                  data is Map &&
-                  data['type'] == 'NAVIGATE_TO_NOTIFICATIONS') {
-                print(
-                  '🌐 [APP] Recebido NAVIGATE_TO_NOTIFICATIONS do Service Worker',
-                );
-
-                final context = NavigationService.context;
-                if (context != null) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => NotificationsPage()),
-                    );
-                  });
-                } else {
-                  print('⚠️ Contexto de navegação não disponível');
-                }
-              }
-            }
-            as html.EventListener?,
-      );
-
-      print('✅ Listener do Service Worker configurado');
-    } catch (e) {
-      print('❌ Erro ao configurar listener do Service Worker: $e');
-    }
-  }
-}
-
-/*void _setupServiceWorkerListener() {
-  if (kIsWeb) {
-    try {
-      // Ouvinte para mensagens do Service Worker
-      html.window.addEventListener(
-        'message',
-        (event) {
-              final data = event.data;
-              if (data is Map && data['type'] == 'NOTIFICATION_CLICK') {
-                print(
-                  '🌐 [APP] Mensagem do Service Worker recebida: ${data['data']}',
-                );
-
-                // Navegar para a página de notificações
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (NavigationService.context != null) {
-                    Navigator.push(
-                      NavigationService.context!,
-                      MaterialPageRoute(
-                        builder: (context) => NotificationsPage(),
-                      ),
-                    );
-                  }
-                });
-              }
-            }
-            as html.EventListener?,
-      );
-
-      print('✅ Listener do Service Worker configurado');
-    } catch (e) {
-      print('❌ Erro ao configurar listener: $e');
-    }
-  }
-}*/

@@ -1493,9 +1493,12 @@ class _HomePageState extends State<HomePage> {
     //webService.testNotification();
     print("AAAAAAAAAAAAAAAAAAA");
     final notificationService = NotificationService();
+    //notificationService.testLocalNotification();
+    notificationService.checkFCMConfiguration();
     final currentUser = FirebaseAuth.instance.currentUser;
 
     if (currentUser != null) {
+      //notificationService.debugNotificationFlow(currentUser.uid);
       final resultado = await notificationService.sendNotification(
         toUserId: currentUser.uid, // Enviar para si mesmo
         title: "Teste Personalizado 🧪",

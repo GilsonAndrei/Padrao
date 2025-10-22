@@ -13,14 +13,13 @@ import 'package:projeto_padrao/app/app_widget.dart';
 import 'package:projeto_padrao/models/usuario.dart';
 import 'package:projeto_padrao/views/notifications/notifications_page.dart';
 
-class NotificationService {
+class NotificationService extends ChangeNotifier {
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService() => _instance;
   NotificationService._internal();
 
   // Instâncias do Firebase
   FirebaseMessaging get _firebaseMessaging => FirebaseMessaging.instance;
-
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
@@ -43,27 +42,20 @@ class NotificationService {
     if (_isInitialized || kIsWeb) return;
 
     try {
-      // ✅ VERIFICAR SE FIREBASE ESTÁ INICIALIZADO (CRÍTICO PARA WEB)
+      // ✅ VERIFICAR SE FIREBASE ESTÁ INICIALIZADO
       try {
-        Firebase.app(); // Testa se Firebase está inicializado
+        Firebase.app();
       } catch (e) {
         print('❌ Firebase não inicializado. Aguardando...');
         await Firebase.initializeApp();
-      }
-
-      // ✅ PARA WEB: VERIFICAR COMPATIBILIDADE
-      if (kIsWeb) {
-        print('🌐 Modo Web: Notificações limitadas');
-        // Na web, algumas funcionalidades são limitadas
-        _isInitialized = true;
-        return;
       }
 
       await _setupFirebaseMessaging();
       await _setupLocalNotifications();
       _setupForegroundNotifications();
       _setupBackgroundHandler();
-      _setupTokenMonitoring();
+      _setupTokenMonitoring(); // ✅ ADICIONE ESTA LINHA
+      _setupFCMDebug(); // Debug FCM
 
       _isInitialized = true;
       print('✅ NotificationService inicializado com sucesso');
@@ -144,7 +136,7 @@ class NotificationService {
     }
   }
 
-  // ✅ CORRIGIDO: Configurar notificações locais (API ATUALIZADA)
+  // ✅ CORRIGIDO: Configurar notificações locais
   Future<void> _setupLocalNotifications() async {
     _localNotifications = FlutterLocalNotificationsPlugin();
 
@@ -152,14 +144,12 @@ class NotificationService {
     const AndroidInitializationSettings androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
 
-    // ✅ CORREÇÃO: Configuração iOS atualizada (sem onDidReceiveLocalNotification)
+    // Configuração iOS
     const DarwinInitializationSettings iosSettings =
         DarwinInitializationSettings(
           requestAlertPermission: true,
           requestBadgePermission: true,
           requestSoundPermission: true,
-          // ❌ REMOVIDO: onDidReceiveLocalNotification não existe mais
-          // ✅ ADICIONADO: notificationCategories opcional
         );
 
     const InitializationSettings settings = InitializationSettings(
@@ -169,17 +159,16 @@ class NotificationService {
 
     await _localNotifications.initialize(
       settings,
-      // ✅ CORREÇÃO: Usar apenas onDidReceiveNotificationResponse
       onDidReceiveNotificationResponse: _onDidReceiveNotificationResponse,
     );
 
     await _createNotificationChannel();
   }
 
-  // ✅ CORREÇÃO: Handler para notificações (simplificado)
+  // ✅ Handler para notificações clicadas
   static void _onDidReceiveNotificationResponse(NotificationResponse response) {
-    print('Notificação clicada: ${response.payload}');
-    // Aqui você pode adicionar lógica para navegação
+    print('📱 Notificação local clicada: ${response.payload}');
+    // A navegação é tratada no _handleNotificationClick
   }
 
   // Criar canal de notificação (Android)
@@ -190,7 +179,6 @@ class NotificationService {
       description: 'Este canal é usado para notificações importantes.',
       importance: Importance.max,
       playSound: true,
-      // sound: RawResourceAndroidNotificationSound('notification'), // Opcional
       enableVibration: true,
       vibrationPattern: Int64List.fromList(const [0, 500, 200, 500]),
     );
@@ -202,63 +190,41 @@ class NotificationService {
         ?.createNotificationChannel(channel);
   }
 
-  // ✅ CORREÇÃO: Atualizar badge count para iOS (API ATUALIZADA)
-  Future<void> _updateBadgeCount() async {
-    try {
-      final unreadCount = await getUnreadCount().first;
-
-      if (defaultTargetPlatform == TargetPlatform.iOS) {
-        final iOSPlugin = _localNotifications
-            .resolvePlatformSpecificImplementation<
-              IOSFlutterLocalNotificationsPlugin
-            >();
-
-        if (iOSPlugin != null) {
-          // ✅ CORREÇÃO: Método correto para badge no iOS
-          // Nas versões recentes, o badge é gerenciado automaticamente
-          // ou através do método setBadgeCount (se disponível)
-
-          // Tentar método alternativo
-          try {
-            // Método 1: Tentar setBadgeCount (pode estar disponível)
-            // await iOSPlugin.setBadgeCount(unreadCount);
-
-            // Método 2: Atualizar através de uma notificação
-            // O badge é atualizado automaticamente quando mostramos notificações
-            print('📱 iOS Badge count: $unreadCount');
-          } catch (e) {
-            print('⚠️ Método de badge não disponível: $e');
-          }
-        }
-      }
-    } catch (e) {
-      print('❌ Erro ao atualizar badge: $e');
-    }
-  }
-
-  // Configurar handlers para foreground
+  // ✅ CORRIGIDO: Configurar handlers para foreground
   void _setupForegroundNotifications() {
+    print('🎯 CONFIGURANDO LISTENERS FCM...');
+
+    // ✅ LISTENER PARA FOREGROUND - DEVE MOSTRAR NOTIFICAÇÃO
+    _subscriptions.add(
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+        print('📱 FCM RECEBIDO EM FOREGROUND: ${message.messageId}');
+        print('📢 Título: ${message.notification?.title}');
+        print('📝 Corpo: ${message.notification?.body}');
+        print('🔍 Data: ${message.data}');
+
+        // ✅ MOSTRAR NOTIFICAÇÃO LOCAL IMEDIATAMENTE
+        _showLocalNotification(message);
+
+        // Adicionar à stream
+        _notificationStream.add(message);
+      }),
+    );
+
+    // ✅ LISTENER PARA QUANDO O USUÁRIO CLICA NA NOTIFICAÇÃO
     _subscriptions.add(
       FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-        print('🔗 Notificação clicada (app aberto): ${message.messageId}');
+        print('🔗 NOTIFICAÇÃO CLICADA: ${message.messageId}');
         _handleNotificationClick(message);
       }),
     );
-    _subscriptions.add(
-      FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-        print('🔗 Notificação clicada: ${message.messageId}');
-        _notificationStream.add(message);
-        _markNotificationAsClicked(message.data['notificationId']);
-      }),
-    );
   }
 
-  // Configurar handler para background
   void _setupBackgroundHandler() {
-    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+    print('🔄 CONFIGURANDO BACKGROUND HANDLER...');
+    // Já configurado no main.dart como função top-level
   }
 
-  // ✅ NOVO: Handler específico para clique
+  // ✅ Handler específico para clique
   void _handleNotificationClick(RemoteMessage message) {
     final data = message.data;
     final type = data['type'];
@@ -285,45 +251,62 @@ class NotificationService {
   static Future<void> _firebaseMessagingBackgroundHandler(
     RemoteMessage message,
   ) async {
+    print("🔄 HANDLER BACKGROUND: ${message.messageId}");
+
+    // ✅ INICIALIZAR FIREBASE NO BACKGROUND
     await Firebase.initializeApp();
-    print("🔄 Notificação em background: ${message.messageId}");
+
+    // ✅ CRIAR INSTÂNCIA E MOSTRAR NOTIFICAÇÃO
+    final notificationService = NotificationService();
+    await notificationService._initializeForBackground();
+    await notificationService._showLocalNotification(message);
   }
 
-  // ✅ CORREÇÃO: Mostrar notificação local (API ATUALIZADA)
+  // ✅ NOVO: Inicialização específica para background
+  Future<void> _initializeForBackground() async {
+    _localNotifications = FlutterLocalNotificationsPlugin();
+
+    const AndroidInitializationSettings androidSettings =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+
+    const DarwinInitializationSettings iosSettings =
+        DarwinInitializationSettings();
+
+    const InitializationSettings settings = InitializationSettings(
+      android: androidSettings,
+      iOS: iosSettings,
+    );
+
+    await _localNotifications.initialize(settings);
+    await _createNotificationChannel();
+  }
+
+  // ✅ MÉTODO CORRIGIDO: Mostrar notificação local
   Future<void> _showLocalNotification(RemoteMessage message) async {
     try {
-      final AndroidNotificationDetails
-      androidDetails = AndroidNotificationDetails(
-        'high_importance_channel',
-        'Notificações Importantes',
-        channelDescription: 'Canal para notificações importantes',
-        importance: Importance.max,
-        priority: Priority.high,
-        playSound: true,
-        // sound: RawResourceAndroidNotificationSound('notification'), // Opcional
-        enableVibration: true,
-        vibrationPattern: Int64List.fromList(const [0, 500, 200, 500]),
-        styleInformation: MessagingStyleInformation(
-          Person(
-            name: message.data['fromUserName'] ?? 'Usuário',
-            important: true,
-          ),
-        ),
-        channelShowBadge: true,
-        enableLights: true,
-        ledColor: Color(0xFF2196F3),
-        ledOnMs: 1000,
-        ledOffMs: 500,
-      );
+      final AndroidNotificationDetails androidDetails =
+          AndroidNotificationDetails(
+            'high_importance_channel', // ID do canal
+            'Notificações Importantes', // Nome do canal
+            channelDescription: 'Canal para notificações importantes',
+            importance: Importance.max,
+            priority: Priority.high,
+            playSound: true,
+            enableVibration: true,
+            vibrationPattern: Int64List.fromList(const [0, 500, 200, 500]),
+            channelShowBadge: true,
+            enableLights: true,
+            ledColor: const Color(0xFF2196F3),
+            ledOnMs: 1000,
+            ledOffMs: 500,
+          );
 
-      // ✅ CORREÇÃO: Configuração iOS atualizada
+      // Configuração iOS
       const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
         presentAlert: true,
         presentBadge: true,
         presentSound: true,
         badgeNumber: 1,
-        threadIdentifier: 'message_thread',
-        // ✅ REMOVIDO: categoryIdentifier não suportado aqui
       );
 
       final NotificationDetails details = NotificationDetails(
@@ -331,18 +314,49 @@ class NotificationService {
         iOS: iosDetails,
       );
 
+      // Gerar ID único para a notificação
+      final notificationId = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
       await _localNotifications.show(
-        DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        notificationId,
         message.notification?.title ?? 'Nova notificação',
-        message.notification?.body ?? '',
+        message.notification?.body ?? 'Você tem uma nova mensagem',
         details,
-        payload: message.data['notificationId'],
+        payload: message.data['notificationId'] ?? message.messageId,
       );
 
-      // Atualizar badge após mostrar notificação
+      print('✅ Notificação local mostrada: $notificationId');
+
+      // Atualizar badge
       await _updateBadgeCount();
     } catch (e) {
       print('❌ Erro ao mostrar notificação local: $e');
+    }
+  }
+
+  // ✅ Atualizar badge count
+  Future<void> _updateBadgeCount() async {
+    try {
+      final unreadCount = await getUnreadCount().first;
+
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        final iOSPlugin = _localNotifications
+            .resolvePlatformSpecificImplementation<
+              IOSFlutterLocalNotificationsPlugin
+            >();
+
+        if (iOSPlugin != null) {
+          // Tentar atualizar badge no iOS
+          try {
+            // await iOSPlugin.setBadgeCount(unreadCount);
+            print('📱 iOS Badge count: $unreadCount');
+          } catch (e) {
+            print('⚠️ Método de badge não disponível: $e');
+          }
+        }
+      }
+    } catch (e) {
+      print('❌ Erro ao atualizar badge: $e');
     }
   }
 
@@ -749,7 +763,7 @@ class NotificationService {
     }
   }
 
-  // ✅ CORREÇÃO: Limpar badge (método simplificado)
+  // Limpar badge
   Future<void> clearBadge() async {
     try {
       if (defaultTargetPlatform == TargetPlatform.iOS) {
@@ -759,7 +773,6 @@ class NotificationService {
             >();
 
         if (iOSPlugin != null) {
-          // Tentar método disponível
           try {
             // await iOSPlugin.setBadgeCount(0);
             print('✅ Badge limpo (iOS)');
@@ -773,6 +786,45 @@ class NotificationService {
     }
   }
 
+  // ✅ MÉTODO DE TESTE PARA NOTIFICAÇÕES LOCAIS
+  Future<void> testLocalNotification() async {
+    try {
+      final androidDetails = AndroidNotificationDetails(
+        'high_importance_channel',
+        'Notificações Importantes',
+        channelDescription: 'Canal para notificações importantes',
+        importance: Importance.max,
+        priority: Priority.high,
+        playSound: true,
+        enableVibration: true,
+        vibrationPattern: Int64List.fromList(const [0, 500, 200, 500]),
+      );
+
+      const iosDetails = DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+      );
+
+      final details = NotificationDetails(
+        android: androidDetails,
+        iOS: iosDetails,
+      );
+
+      await _localNotifications.show(
+        DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        'Teste de Notificação',
+        'Esta é uma notificação de teste do app!',
+        details,
+        payload: 'test_notification',
+      );
+
+      print('✅ Notificação de teste enviada com sucesso!');
+    } catch (e) {
+      print('❌ Erro ao enviar notificação de teste: $e');
+    }
+  }
+
   // Dispose para limpar recursos
   void dispose() {
     for (final sub in _subscriptions) {
@@ -781,5 +833,171 @@ class NotificationService {
     _notificationStream.close();
     _isInitialized = false;
     print('🔴 NotificationService disposed');
+  }
+
+  // ✅ ADICIONE ESTE MÉTODO PARA DIAGNÓSTICO
+  Future<void> checkFCMConfiguration() async {
+    print('\n🔍 DIAGNÓSTICO FCM');
+    print('=' * 30);
+
+    try {
+      // Verificar token
+      final token = await _firebaseMessaging.getToken();
+      print('📱 Token FCM: ${token != null ? "✅" : "❌"}');
+      if (token != null) {
+        print('   - Token: ${token.substring(0, 20)}...');
+      }
+
+      // Verificar permissões
+      final settings = await _firebaseMessaging.getNotificationSettings();
+      print('🔔 Permissões:');
+      print('   - Alert: ${settings.alert}');
+      print('   - Badge: ${settings.badge}');
+      print('   - Sound: ${settings.sound}');
+      print('   - Authorization: ${settings.authorizationStatus}');
+
+      // Verificar se está ouvindo
+      print('👂 Listeners ativos: ${_subscriptions.length}');
+    } catch (e) {
+      print('❌ Erro no diagnóstico: $e');
+    }
+  }
+
+  // ✅ ADICIONE ESTE MÉTODO PARA VERIFICAR O FLUXO COMPLETO
+  Future<void> debugNotificationFlow(String targetUserId) async {
+    print('\n🔍 DEBUG: FLUXO DE NOTIFICAÇÃO');
+    print('=' * 40);
+
+    try {
+      final currentUser = _auth.currentUser;
+      if (currentUser == null) {
+        print('❌ Usuário não autenticado');
+        return;
+      }
+
+      // 1. VERIFICAR TOKEN DO USUÁRIO ATUAL
+      final myToken = await _firebaseMessaging.getToken();
+      print('📱 MEU Token FCM: ${myToken?.substring(0, 20)}...');
+
+      // 2. VERIFICAR TOKEN DO USUÁRIO ALVO
+      final targetUserDoc = await _firestore
+          .collection('usuarios')
+          .doc(targetUserId)
+          .get();
+      final targetUserToken = targetUserDoc.data()?['fcmToken'];
+      print('🎯 Token FCM do ALVO: ${targetUserToken != null ? "✅" : "❌"}');
+      if (targetUserToken != null) {
+        print('   - Token: ${targetUserToken.substring(0, 20)}...');
+      }
+
+      // 3. VERIFICAR SE O ALVO É DIFERENTE DE MIM
+      final isSelf = targetUserId == currentUser.uid;
+      print('👥 Enviando para outro usuário: ${!isSelf}');
+
+      // 4. VERIFICAR LISTENERS
+      print('👂 Meus listeners ativos: ${_subscriptions.length}');
+
+      // 5. TESTAR NOTIFICAÇÃO
+      if (!isSelf && targetUserToken != null) {
+        print('🚀 TESTANDO ENVIO PARA OUTRO USUÁRIO...');
+
+        final result = await sendNotification(
+          toUserId: targetUserId,
+          title: 'Debug Test',
+          message: 'Esta é uma notificação de debug',
+          data: {
+            'debug': 'true',
+            'timestamp': DateTime.now().millisecondsSinceEpoch.toString(),
+          },
+        );
+
+        print(
+          '📤 Resultado do envio: ${result['success'] ? '✅' : '❌ ${result['error']}'}',
+        );
+
+        if (result['success'] == true) {
+          print('💡 A notificação FOI ENVIADA para o FCM do usuário alvo');
+          print('💡 O usuário alvo deve receber automaticamente via FCM');
+        }
+      } else if (isSelf) {
+        print('ℹ️  Enviando para si mesmo - mostrando notificação local');
+        await testLocalNotification();
+      } else {
+        print('❌ Não é possível testar - usuário alvo sem token FCM');
+      }
+    } catch (e) {
+      print('❌ Erro no debug: $e');
+    }
+  }
+
+  // ✅ ADICIONE ESTE MÉTODO DE DEBUG FCM
+  void _setupFCMDebug() {
+    print('🔍 INICIANDO DEBUG FCM...');
+
+    // LISTENER PARA VER SE O FCM ESTÁ CHEGANDO
+    _subscriptions.add(
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+        print('🎯 FCM RECEBIDO!');
+        print('   - MessageId: ${message.messageId}');
+        print('   - Title: ${message.notification?.title}');
+        print('   - Body: ${message.notification?.body}');
+        print('   - Data: ${message.data}');
+
+        // Mostrar notificação local do FCM
+        _showLocalNotification(message);
+      }),
+    );
+
+    // LISTENER PARA BACKGROUND
+    _subscriptions.add(
+      FirebaseMessaging.onMessageOpenedApp.listen((message) {
+        print('🔗 FCM CLICADO (background): ${message.messageId}');
+      }),
+    );
+  }
+
+  Future<void> testNotificationNow() async {
+    print('🚀 TESTANDO NOTIFICAÇÃO LOCAL...');
+
+    try {
+      final AndroidNotificationDetails androidDetails =
+          AndroidNotificationDetails(
+            'high_importance_channel',
+            'Notificações Importantes',
+            channelDescription: 'Canal para notificações importantes',
+            importance: Importance.max,
+            priority: Priority.high,
+            playSound: true,
+            enableVibration: true,
+            vibrationPattern: Int64List.fromList(const [0, 500, 200, 500]),
+            channelShowBadge: true,
+            enableLights: true,
+            ledColor: Colors.blue,
+            ledOnMs: 1000,
+            ledOffMs: 500,
+          );
+
+      const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+      );
+
+      final NotificationDetails details = NotificationDetails(
+        android: androidDetails,
+        iOS: iosDetails,
+      );
+
+      await _localNotifications.show(
+        9999, // ID fixo para teste
+        '🔥 TESTE DE NOTIFICAÇÃO',
+        'Se esta notificação aparecer, o problema está no FCM!',
+        details,
+      );
+
+      print('✅ NOTIFICAÇÃO LOCAL ENVIADA COM SUCESSO!');
+    } catch (e) {
+      print('❌ ERRO NA NOTIFICAÇÃO LOCAL: $e');
+    }
   }
 }

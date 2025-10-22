@@ -658,6 +658,8 @@ class AuthController with ChangeNotifier {
       print('❌ [CONTROLLER] Erro ao inicializar sessão: $e');
       _setLoading(false);
       _sessionInitialized = false;
+    } finally {
+      _isLoading = false;
     }
   }
 
@@ -683,25 +685,29 @@ class AuthController with ChangeNotifier {
   }
 
   // ✅ ATUALIZAR TRADUÇÃO DE ERROS DO FIREBASE
- String _traduzirErroFirebase(String codigo) {
-  final errors = {
-    'user-not-found': 'Nenhuma conta encontrada com este e-mail.',
-    'wrong-password': 'Senha incorreta. Verifique suas credenciais.',
-    'invalid-email': 'Formato de e-mail inválido.',
-    'user-disabled': 'Conta desativada. Entre em contato com o administrador.',
-    'too-many-requests': 'Muitas tentativas. Aguarde 15 minutos e tente novamente.',
-    'operation-not-allowed': 'Operação não permitida no momento.',
-    'network-request-failed': 'Erro de conexão. Verifique sua internet.',
-    'email-already-in-use': 'Este e-mail já está cadastrado.',
-    'weak-password': 'Senha muito fraca. Use pelo menos 6 caracteres.',
-    'configuration-not-found': 'Erro de configuração do sistema.',
-    'invalid-credential': 'Credenciais inválidas ou expiradas.',
-    'account-exists-with-different-credential': 'Conta já existe com credenciais diferentes.',
-    'requires-recent-login': 'Requer login recente. Faça login novamente.',
-  };
-  
-  return errors[codigo] ?? 'Erro desconhecido: $codigo';
-}
+  String _traduzirErroFirebase(String codigo) {
+    final errors = {
+      'user-not-found': 'Nenhuma conta encontrada com este e-mail.',
+      'wrong-password': 'Senha incorreta. Verifique suas credenciais.',
+      'invalid-email': 'Formato de e-mail inválido.',
+      'user-disabled':
+          'Conta desativada. Entre em contato com o administrador.',
+      'too-many-requests':
+          'Muitas tentativas. Aguarde 15 minutos e tente novamente.',
+      'operation-not-allowed': 'Operação não permitida no momento.',
+      'network-request-failed': 'Erro de conexão. Verifique sua internet.',
+      'email-already-in-use': 'Este e-mail já está cadastrado.',
+      'weak-password': 'Senha muito fraca. Use pelo menos 6 caracteres.',
+      'configuration-not-found': 'Erro de configuração do sistema.',
+      'invalid-credential': 'Credenciais inválidas ou expiradas.',
+      'account-exists-with-different-credential':
+          'Conta já existe com credenciais diferentes.',
+      'requires-recent-login': 'Requer login recente. Faça login novamente.',
+    };
+
+    return errors[codigo] ?? 'Erro desconhecido: $codigo';
+  }
+
   void _setLoading(bool loading) {
     _isLoading = loading;
     notifyListeners();
