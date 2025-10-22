@@ -29,6 +29,76 @@ class AuthController with ChangeNotifier {
   bool _sessionInitialized = false;
   String? _currentDeviceId;
 
+  // ✅ MÉTODO CRÍTICO: Definir usuário a partir da sessão (para Route Guard)
+  void setUserFromSession(Usuario usuario, String deviceId) {
+    _usuarioLogado = usuario;
+    _currentDeviceId = deviceId;
+    _sessionInitialized = true;
+    _isLoading = false;
+
+    print(
+      '✅ [CONTROLLER] Usuário definido a partir da sessão: ${usuario.email}',
+    );
+    notifyListeners();
+  }
+
+  // ✅ MÉTODO PARA VERIFICAR E INICIALIZAR SESSÃO (chamado pelo Route Guard)
+  Future<void> checkAndInitializeSession() async {
+    if (_sessionInitialized) return;
+
+    _setLoading(true);
+
+    try {
+      print('🔍 [CONTROLLER] Verificando e inicializando sessão...');
+
+      // Verifica se tem usuário no Firebase Auth
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser != null) {
+        print(
+          '🔥 [CONTROLLER] Usuário Firebase encontrado: ${currentUser.email}',
+        );
+
+        // Busca dados completos no Firestore
+        _usuarioLogado = await _authService.getUserById(currentUser.uid);
+
+        if (_usuarioLogado != null) {
+          // ✅ VERIFICA SE USUÁRIO ESTÁ ATIVO
+          if (!_usuarioLogado!.ativo) {
+            print(
+              '🚫 [CONTROLLER] Usuário desativado: ${_usuarioLogado!.nome}',
+            );
+            await logout();
+            _setLoading(false);
+            return;
+          }
+
+          _currentDeviceId = await DeviceService.getDeviceId();
+
+          // Verifica se sessão não está expirada
+          final isExpired = await SessionTrackerService.isSessionExpired(
+            _usuarioLogado!.id,
+            _currentDeviceId!,
+          );
+
+          if (isExpired) {
+            print('⏰ [CONTROLLER] Sessão expirada');
+            await logout();
+          } else {
+            print('✅ [CONTROLLER] Sessão válida: ${_usuarioLogado!.nome}');
+            _sessionInitialized = true;
+
+            // Inicia tracking de atividade
+            _startActivityTracking();
+          }
+        }
+      }
+    } catch (e) {
+      print('❌ [CONTROLLER] Erro ao verificar sessão: $e');
+    } finally {
+      _setLoading(false);
+    }
+  }
+
   // ✅ MÉTODO AUXILIAR PARA VERIFICAR SE USUÁRIO ESTÁ ATIVO
   Future<Usuario?> _verificarUsuarioAtivo(String email) async {
     try {
@@ -658,8 +728,6 @@ class AuthController with ChangeNotifier {
       print('❌ [CONTROLLER] Erro ao inicializar sessão: $e');
       _setLoading(false);
       _sessionInitialized = false;
-    } finally {
-      _isLoading = false;
     }
   }
 

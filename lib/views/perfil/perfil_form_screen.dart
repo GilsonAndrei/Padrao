@@ -5,6 +5,9 @@ import 'package:projeto_padrao/models/perfil_usuario.dart';
 import 'package:projeto_padrao/enums/permissao_usuario.dart';
 import 'package:projeto_padrao/core/themes/app_colors.dart';
 import 'package:projeto_padrao/core/themes/app_theme.dart';
+import 'package:projeto_padrao/core/responsive/responsive_layout.dart';
+import 'package:projeto_padrao/core/responsive/responsive_utils.dart';
+import 'package:projeto_padrao/core/responsive/breakpoints.dart';
 
 class PerfilFormScreen extends StatefulWidget {
   final PerfilUsuario? perfil;
@@ -74,7 +77,103 @@ class _PerfilFormScreenState extends State<PerfilFormScreen> {
           : AppTheme.createGradientAppBar(title: 'Novo Perfil'),
       body: _isSubmitting
           ? _buildLoadingState()
-          : _buildFormContent(context, controller),
+          : ResponsiveLayout(
+              mobile: _buildMobileForm(context, controller),
+              tablet: _buildTabletForm(context, controller),
+              desktop: _buildDesktopForm(context, controller),
+            ),
+    );
+  }
+
+  Widget _buildMobileForm(BuildContext context, PerfilController controller) {
+    return SingleChildScrollView(
+      padding: ResponsiveUtils.getResponsiveScreenPadding(context),
+      child: _buildFormContent(context, controller),
+    );
+  }
+
+  Widget _buildTabletForm(BuildContext context, PerfilController controller) {
+    return Padding(
+      padding: ResponsiveUtils.getResponsiveScreenPadding(context),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(flex: 1, child: _buildPerfilIconSection()),
+          const SizedBox(width: 32),
+          Expanded(
+            flex: 2,
+            child: SingleChildScrollView(
+              child: _buildFormFields(context, controller),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopForm(BuildContext context, PerfilController controller) {
+    return Padding(
+      padding: const EdgeInsets.all(32),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 1,
+            child: Column(
+              children: [
+                _buildPerfilIconSection(),
+                const SizedBox(height: 32),
+                _buildSettingsSection(),
+              ],
+            ),
+          ),
+          const SizedBox(width: 48),
+          Expanded(
+            flex: 2,
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  _buildBasicInfoSection(),
+                  const SizedBox(height: 32),
+                  _buildPermissoesSection(),
+                  const SizedBox(height: 32),
+                  _buildActionButtons(context, controller),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFormContent(BuildContext context, PerfilController controller) {
+    return Column(
+      children: [
+        _buildPerfilIconSection(),
+        const SizedBox(height: 24),
+        _buildBasicInfoSection(),
+        const SizedBox(height: 24),
+        _buildSettingsSection(),
+        const SizedBox(height: 24),
+        _buildPermissoesSection(),
+        const SizedBox(height: 32),
+        _buildActionButtons(context, controller),
+      ],
+    );
+  }
+
+  Widget _buildFormFields(BuildContext context, PerfilController controller) {
+    return Column(
+      children: [
+        _buildBasicInfoSection(),
+        const SizedBox(height: 24),
+        _buildSettingsSection(),
+        const SizedBox(height: 24),
+        _buildPermissoesSection(),
+        const SizedBox(height: 32),
+        _buildActionButtons(context, controller),
+      ],
     );
   }
 
@@ -96,124 +195,44 @@ class _PerfilFormScreenState extends State<PerfilFormScreen> {
     );
   }
 
-  Widget _buildFormContent(BuildContext context, PerfilController controller) {
-    return Padding(
-      padding: const EdgeInsets.all(0),
-      child: Column(
+  Widget _buildPerfilIconSection() {
+    return ResponsiveValue<double>(
+      mobile: 80,
+      tablet: 100,
+      desktop: 120,
+      builder: (size) => Column(
         children: [
-          // Header com informações
-          //_buildFormHeader(),
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(24),
-                  topRight: Radius.circular(24),
+          Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: AppColors.primaryGradient,
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primary.withOpacity(0.3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 16,
-                    offset: const Offset(0, -4),
-                  ),
-                ],
-              ),
-              child: Form(
-                key: _formKey,
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    children: [
-                      // Ícone do perfil
-                      _buildPerfilIconSection(),
-                      const SizedBox(height: 32),
-
-                      // Informações básicas
-                      _buildBasicInfoSection(),
-                      const SizedBox(height: 24),
-
-                      // Configurações
-                      _buildSettingsSection(),
-                      const SizedBox(height: 32),
-
-                      // Botões de ação
-                      _buildActionButtons(context, controller),
-                    ],
-                  ),
-                ),
-              ),
+              ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFormHeader() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-      decoration: BoxDecoration(gradient: AppColors.primaryGradient),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            widget.perfil == null ? 'Criar Novo Perfil' : 'Editar Perfil',
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
+            child: Icon(
+              Icons.manage_accounts,
+              size: size * 0.4,
               color: Colors.white,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 12),
           Text(
-            widget.perfil == null
-                ? 'Configure as permissões e informações do novo perfil'
-                : 'Atualize as informações e permissões do perfil',
+            'Perfil de Acesso',
             style: TextStyle(
               fontSize: 14,
-              color: Colors.white.withOpacity(0.8),
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildPerfilIconSection() {
-    return Column(
-      children: [
-        Container(
-          width: 100,
-          height: 100,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: AppColors.primaryGradient,
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.primary.withOpacity(0.3),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: const Icon(
-            Icons.manage_accounts,
-            size: 48,
-            color: Colors.white,
-          ),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          'Perfil de Acesso',
-          style: TextStyle(
-            fontSize: 14,
-            color: AppColors.textSecondary,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
     );
   }
 
@@ -295,17 +314,13 @@ class _PerfilFormScreenState extends State<PerfilFormScreen> {
         ),
         const SizedBox(height: 4),
         Text(
-          'Defina o status e as permissões do perfil',
+          'Defina o status do perfil',
           style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
         ),
         const SizedBox(height: 20),
 
         // Status
         _buildStatusSwitch(),
-        const SizedBox(height: 24),
-
-        // Permissões
-        _buildPermissoesSection(),
       ],
     );
   }
@@ -526,188 +541,270 @@ class _PerfilFormScreenState extends State<PerfilFormScreen> {
   Widget _buildCategoriasPermissoes() {
     final categoriasPermissoes = PermissaoUsuarioExtension.agrupadoPorCategoria;
 
+    return ResponsiveLayout(
+      mobile: _buildMobileCategorias(categoriasPermissoes),
+      tablet: _buildTabletCategorias(categoriasPermissoes),
+      desktop: _buildDesktopCategorias(categoriasPermissoes),
+    );
+  }
+
+  Widget _buildMobileCategorias(
+    Map<String, List<PermissaoUsuario>> categoriasPermissoes,
+  ) {
     return Column(
       children: categoriasPermissoes.entries.map((entry) {
         final categoria = entry.key;
         final permissoes = entry.value;
         final isOpen = _categoriasAbertas[categoria] ?? false;
-
-        // Conta quantas permissões estão selecionadas nesta categoria
         final permissoesSelecionadas = permissoes
             .where((permissao) => _permissoesSelecionadas.contains(permissao))
             .length;
 
-        return Card(
-          margin: const EdgeInsets.only(bottom: 12),
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(
-              color: permissoesSelecionadas > 0
-                  ? AppColors.primary.withOpacity(0.3)
-                  : AppColors.border,
-            ),
-          ),
-          child: ExpansionTile(
-            key: Key(categoria),
-            initiallyExpanded: isOpen,
-            onExpansionChanged: (expanded) {
-              setState(() {
-                _categoriasAbertas[categoria] = expanded;
-              });
-            },
-            leading: Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: permissoesSelecionadas > 0
-                    ? AppColors.primary.withOpacity(0.1)
-                    : AppColors.background,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                PermissaoUsuarioExtension.obterIconeCategoria(categoria),
-                size: 18,
-                color: permissoesSelecionadas > 0
-                    ? AppColors.primary
-                    : AppColors.textSecondary,
-              ),
-            ),
-            title: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    categoria,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
-                      fontSize: 15,
-                    ),
-                  ),
-                ),
-                if (permissoesSelecionadas > 0) ...[
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      '$permissoesSelecionadas/${permissoes.length}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-            trailing: Icon(
-              isOpen ? Icons.expand_less : Icons.expand_more,
-              color: AppColors.primary,
-            ),
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                child: Column(
-                  children: [
-                    // Opção "Selecionar Tudo" para a categoria
-                    if (permissoesSelecionadas < permissoes.length)
-                      ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        leading: Icon(
-                          Icons.add_circle_outline,
-                          size: 20,
-                          color: AppColors.primary,
-                        ),
-                        title: Text(
-                          'Selecionar todas as permissões',
-                          style: TextStyle(
-                            color: AppColors.primary,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        onTap: () {
-                          setState(() {
-                            for (final permissao in permissoes) {
-                              if (!_permissoesSelecionadas.contains(
-                                permissao,
-                              )) {
-                                _permissoesSelecionadas.add(permissao);
-                              }
-                            }
-                          });
-                        },
-                      ),
-
-                    // Lista de permissões da categoria
-                    ...permissoes.map((permissao) {
-                      final isSelected = _permissoesSelecionadas.contains(
-                        permissao,
-                      );
-                      return CheckboxListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        title: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              permissao.nome,
-                              style: TextStyle(
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.textPrimary,
-                                fontSize: 13,
-                              ),
-                            ),
-                            Text(
-                              permissao.codigo,
-                              style: TextStyle(
-                                color: AppColors.textSecondary,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ],
-                        ),
-                        value: isSelected,
-                        onChanged: (selected) {
-                          setState(() {
-                            if (selected == true) {
-                              _permissoesSelecionadas.add(permissao);
-                            } else {
-                              _permissoesSelecionadas.remove(permissao);
-                            }
-                          });
-                        },
-                        secondary: Icon(
-                          isSelected
-                              ? Icons.check_circle
-                              : Icons.radio_button_unchecked,
-                          size: 20,
-                          color: isSelected
-                              ? AppColors.success
-                              : AppColors.textDisabled,
-                        ),
-                        controlAffinity: ListTileControlAffinity.leading,
-                      );
-                    }).toList(),
-                  ],
-                ),
-              ),
-            ],
-          ),
+        return _buildCategoriaExpansion(
+          categoria: categoria,
+          permissoes: permissoes,
+          isOpen: isOpen,
+          permissoesSelecionadas: permissoesSelecionadas,
         );
       }).toList(),
     );
   }
 
+  Widget _buildTabletCategorias(
+    Map<String, List<PermissaoUsuario>> categoriasPermissoes,
+  ) {
+    return Column(
+      children: categoriasPermissoes.entries.map((entry) {
+        final categoria = entry.key;
+        final permissoes = entry.value;
+        final isOpen = _categoriasAbertas[categoria] ?? false;
+        final permissoesSelecionadas = permissoes
+            .where((permissao) => _permissoesSelecionadas.contains(permissao))
+            .length;
+
+        return _buildCategoriaExpansion(
+          categoria: categoria,
+          permissoes: permissoes,
+          isOpen: isOpen,
+          permissoesSelecionadas: permissoesSelecionadas,
+          isTablet: true,
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildDesktopCategorias(
+    Map<String, List<PermissaoUsuario>> categoriasPermissoes,
+  ) {
+    return Column(
+      children: categoriasPermissoes.entries.map((entry) {
+        final categoria = entry.key;
+        final permissoes = entry.value;
+        final isOpen = _categoriasAbertas[categoria] ?? false;
+        final permissoesSelecionadas = permissoes
+            .where((permissao) => _permissoesSelecionadas.contains(permissao))
+            .length;
+
+        return _buildCategoriaExpansion(
+          categoria: categoria,
+          permissoes: permissoes,
+          isOpen: isOpen,
+          permissoesSelecionadas: permissoesSelecionadas,
+          isDesktop: true,
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildCategoriaExpansion({
+    required String categoria,
+    required List<PermissaoUsuario> permissoes,
+    required bool isOpen,
+    required int permissoesSelecionadas,
+    bool isTablet = false,
+    bool isDesktop = false,
+  }) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: permissoesSelecionadas > 0
+              ? AppColors.primary.withOpacity(0.3)
+              : AppColors.border,
+        ),
+      ),
+      child: ExpansionTile(
+        key: Key(categoria),
+        initiallyExpanded: isOpen,
+        onExpansionChanged: (expanded) {
+          setState(() {
+            _categoriasAbertas[categoria] = expanded;
+          });
+        },
+        leading: Container(
+          width: isDesktop ? 40 : 32,
+          height: isDesktop ? 40 : 32,
+          decoration: BoxDecoration(
+            color: permissoesSelecionadas > 0
+                ? AppColors.primary.withOpacity(0.1)
+                : AppColors.background,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            PermissaoUsuarioExtension.obterIconeCategoria(categoria),
+            size: isDesktop ? 20 : 18,
+            color: permissoesSelecionadas > 0
+                ? AppColors.primary
+                : AppColors.textSecondary,
+          ),
+        ),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                categoria,
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                  fontSize: isDesktop ? 16 : 15,
+                ),
+              ),
+            ),
+            if (permissoesSelecionadas > 0) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '$permissoesSelecionadas/${permissoes.length}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        trailing: Icon(
+          isOpen ? Icons.expand_less : Icons.expand_more,
+          color: AppColors.primary,
+          size: isDesktop ? 24 : 20,
+        ),
+        children: [
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              isDesktop ? 20 : 16,
+              0,
+              isDesktop ? 20 : 16,
+              isDesktop ? 20 : 16,
+            ),
+            child: Column(
+              children: [
+                // Opção "Selecionar Tudo" para a categoria
+                if (permissoesSelecionadas < permissoes.length)
+                  ListTile(
+                    dense: !isDesktop,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      Icons.add_circle_outline,
+                      size: isDesktop ? 22 : 20,
+                      color: AppColors.primary,
+                    ),
+                    title: Text(
+                      'Selecionar todas as permissões',
+                      style: TextStyle(
+                        color: AppColors.primary,
+                        fontSize: isDesktop ? 14 : 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    onTap: () {
+                      setState(() {
+                        for (final permissao in permissoes) {
+                          if (!_permissoesSelecionadas.contains(permissao)) {
+                            _permissoesSelecionadas.add(permissao);
+                          }
+                        }
+                      });
+                    },
+                  ),
+
+                // Lista de permissões da categoria
+                ...permissoes.map((permissao) {
+                  final isSelected = _permissoesSelecionadas.contains(
+                    permissao,
+                  );
+                  return CheckboxListTile(
+                    dense: !isDesktop,
+                    contentPadding: EdgeInsets.zero,
+                    title: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          permissao.nome,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textPrimary,
+                            fontSize: isDesktop ? 14 : 13,
+                          ),
+                        ),
+                        Text(
+                          permissao.codigo,
+                          style: TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: isDesktop ? 12 : 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                    value: isSelected,
+                    onChanged: (selected) {
+                      setState(() {
+                        if (selected == true) {
+                          _permissoesSelecionadas.add(permissao);
+                        } else {
+                          _permissoesSelecionadas.remove(permissao);
+                        }
+                      });
+                    },
+                    secondary: Icon(
+                      isSelected
+                          ? Icons.check_circle
+                          : Icons.radio_button_unchecked,
+                      size: isDesktop ? 22 : 20,
+                      color: isSelected
+                          ? AppColors.success
+                          : AppColors.textDisabled,
+                    ),
+                    controlAffinity: ListTileControlAffinity.leading,
+                  );
+                }).toList(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildActionButtons(
+    BuildContext context,
+    PerfilController controller,
+  ) {
+    return ResponsiveLayout(
+      mobile: _buildMobileActionButtons(context, controller),
+      tablet: _buildTabletActionButtons(context, controller),
+      desktop: _buildDesktopActionButtons(context, controller),
+    );
+  }
+
+  Widget _buildMobileActionButtons(
     BuildContext context,
     PerfilController controller,
   ) {
@@ -755,6 +852,110 @@ class _PerfilFormScreenState extends State<PerfilFormScreen> {
               ),
             ),
           ),
+      ],
+    );
+  }
+
+  Widget _buildTabletActionButtons(
+    BuildContext context,
+    PerfilController controller,
+  ) {
+    return Row(
+      children: [
+        if (widget.perfil == null) ...[
+          Expanded(
+            child: OutlinedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                side: BorderSide(color: AppColors.primary),
+              ),
+              child: Text(
+                'CANCELAR',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.primary,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+        ],
+        Expanded(
+          flex: widget.perfil == null ? 1 : 2,
+          child: ElevatedButton(
+            onPressed: () => _handleSavePerfil(context, controller),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 2,
+            ),
+            child: Text(
+              widget.perfil == null ? 'CRIAR PERFIL' : 'ATUALIZAR PERFIL',
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDesktopActionButtons(
+    BuildContext context,
+    PerfilController controller,
+  ) {
+    return Row(
+      children: [
+        if (widget.perfil == null) ...[
+          SizedBox(
+            width: 200,
+            child: OutlinedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                side: BorderSide(color: AppColors.primary),
+              ),
+              child: Text(
+                'CANCELAR',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.primary,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+        ],
+        Expanded(
+          child: ElevatedButton(
+            onPressed: () => _handleSavePerfil(context, controller),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 2,
+            ),
+            child: Text(
+              widget.perfil == null ? 'CRIAR PERFIL' : 'ATUALIZAR PERFIL',
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+            ),
+          ),
+        ),
       ],
     );
   }

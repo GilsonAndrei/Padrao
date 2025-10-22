@@ -1,6 +1,7 @@
 // services/auth_service.dart
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:projeto_padrao/core/constants/app_constants.dart';
 import 'package:projeto_padrao/core/utils/logger_service.dart';
 import 'package:projeto_padrao/enums/permissao_usuario.dart';
 import '../../models/usuario.dart';
@@ -28,7 +29,7 @@ class AuthService {
       print('🔍 [SERVICE] Buscando usuário por email: $email');
 
       final querySnapshot = await FirebaseFirestore.instance
-          .collection('usuarios')
+          .collection(AppConstants.usersCollection)
           .where('email', isEqualTo: email.toLowerCase())
           .limit(1)
           .get();

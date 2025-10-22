@@ -1,13 +1,14 @@
 // controllers/usuario/usuario_controller.dart
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:projeto_padrao/core/constants/app_constants.dart';
 import 'package:projeto_padrao/models/usuario.dart';
 import 'package:projeto_padrao/models/perfil_usuario.dart';
 
 class UsuarioController with ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final CollectionReference _usuariosCollection = FirebaseFirestore.instance
-      .collection('usuarios');
+      .collection(AppConstants.usersCollection);
 
   List<Usuario> _items = [];
   bool _isLoading = false;

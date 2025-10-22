@@ -6,6 +6,9 @@ import 'package:provider/provider.dart';
 import 'package:projeto_padrao/models/usuario.dart';
 import 'package:projeto_padrao/models/perfil_usuario.dart';
 import 'package:projeto_padrao/core/themes/app_colors.dart';
+import 'package:projeto_padrao/core/responsive/responsive_layout.dart';
+import 'package:projeto_padrao/core/responsive/responsive_utils.dart';
+import 'package:projeto_padrao/core/responsive/breakpoints.dart';
 
 class UsuarioFormScreen extends StatefulWidget {
   final Usuario? usuario;
@@ -43,7 +46,6 @@ class _UsuarioFormScreenState extends State<UsuarioFormScreen> {
     _ativo = widget.usuario?.ativo ?? true;
     _emailVerificado = widget.usuario?.emailVerificado ?? false;
 
-    // Carrega os perfis se necessário
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final perfilController = Provider.of<PerfilController>(
         context,
@@ -81,7 +83,133 @@ class _UsuarioFormScreenState extends State<UsuarioFormScreen> {
       ),
       body: _isSubmitting
           ? _buildLoadingState()
-          : _buildFormContent(context, usuarioController, perfilController),
+          : ResponsiveLayout(
+              mobile: _buildMobileForm(
+                context,
+                usuarioController,
+                perfilController,
+              ),
+              tablet: _buildTabletForm(
+                context,
+                usuarioController,
+                perfilController,
+              ),
+              desktop: _buildDesktopForm(
+                context,
+                usuarioController,
+                perfilController,
+              ),
+            ),
+    );
+  }
+
+  Widget _buildMobileForm(
+    BuildContext context,
+    UsuarioController usuarioController,
+    PerfilController perfilController,
+  ) {
+    return SingleChildScrollView(
+      padding: ResponsiveUtils.getResponsiveScreenPadding(context),
+      child: _buildFormContent(context, usuarioController, perfilController),
+    );
+  }
+
+  Widget _buildTabletForm(
+    BuildContext context,
+    UsuarioController usuarioController,
+    PerfilController perfilController,
+  ) {
+    return Padding(
+      padding: ResponsiveUtils.getResponsiveScreenPadding(context),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(flex: 1, child: _buildUserPhotoSection()),
+          const SizedBox(width: 32),
+          Expanded(
+            flex: 2,
+            child: SingleChildScrollView(
+              child: _buildFormFields(
+                context,
+                usuarioController,
+                perfilController,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopForm(
+    BuildContext context,
+    UsuarioController usuarioController,
+    PerfilController perfilController,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.all(32),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 1,
+            child: Column(
+              children: [
+                _buildUserPhotoSection(),
+                const SizedBox(height: 32),
+                _buildSettingsSection(perfilController),
+              ],
+            ),
+          ),
+          const SizedBox(width: 48),
+          Expanded(
+            flex: 2,
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  _buildBasicInfoSection(),
+                  const SizedBox(height: 32),
+                  _buildActionButtons(context, usuarioController),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFormContent(
+    BuildContext context,
+    UsuarioController usuarioController,
+    PerfilController perfilController,
+  ) {
+    return Column(
+      children: [
+        _buildUserPhotoSection(),
+        const SizedBox(height: 24),
+        _buildBasicInfoSection(),
+        const SizedBox(height: 24),
+        _buildSettingsSection(perfilController),
+        const SizedBox(height: 32),
+        _buildActionButtons(context, usuarioController),
+      ],
+    );
+  }
+
+  Widget _buildFormFields(
+    BuildContext context,
+    UsuarioController usuarioController,
+    PerfilController perfilController,
+  ) {
+    return Column(
+      children: [
+        _buildBasicInfoSection(),
+        const SizedBox(height: 24),
+        _buildSettingsSection(perfilController),
+        const SizedBox(height: 32),
+        _buildActionButtons(context, usuarioController),
+      ],
     );
   }
 
@@ -103,163 +231,76 @@ class _UsuarioFormScreenState extends State<UsuarioFormScreen> {
     );
   }
 
-  Widget _buildFormContent(
-    BuildContext context,
-    UsuarioController usuarioController,
-    PerfilController perfilController,
-  ) {
-    return Padding(
-      padding: const EdgeInsets.all(0),
-      child: Column(
-        children: [
-          // Header com informações
-          //_buildFormHeader(),
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(24),
-                  topRight: Radius.circular(24),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 16,
-                    offset: const Offset(0, -4),
-                  ),
-                ],
-              ),
-              child: Form(
-                key: _formKey,
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    children: [
-                      // Foto do usuário
-                      _buildUserPhotoSection(),
-                      const SizedBox(height: 32),
-
-                      // Informações básicas
-                      _buildBasicInfoSection(),
-                      const SizedBox(height: 24),
-
-                      // Configurações
-                      _buildSettingsSection(perfilController),
-                      const SizedBox(height: 32),
-
-                      // Botões de ação
-                      _buildActionButtons(context, usuarioController),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFormHeader() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppColors.primary, AppColors.primary.withOpacity(0.9)],
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          /*Text(
-            widget.usuario == null
-                ? 'Cadastrar Novo Usuário'
-                : 'Editar Usuário',
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            widget.usuario == null
-                ? 'Preencha as informações abaixo para criar um novo usuário'
-                : 'Atualize as informações do usuário',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.white.withOpacity(0.8),
-            ),
-          ),*/
-        ],
-      ),
-    );
-  }
-
   Widget _buildUserPhotoSection() {
-    return Column(
-      children: [
-        Stack(
-          children: [
-            Container(
-              width: 120,
-              height: 120,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppColors.primary.withOpacity(0.1),
-                border: Border.all(
-                  color: AppColors.primary.withOpacity(0.3),
-                  width: 3,
+    return ResponsiveValue<double>(
+      mobile: 100,
+      tablet: 120,
+      desktop: 140,
+      builder: (size) => Column(
+        children: [
+          Stack(
+            children: [
+              Container(
+                width: size,
+                height: size,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.primary.withOpacity(0.1),
+                  border: Border.all(
+                    color: AppColors.primary.withOpacity(0.3),
+                    width: 3,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primary.withOpacity(0.2),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.primary.withOpacity(0.2),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Icon(Icons.person, size: 48, color: AppColors.primary),
-            ),
-            Positioned(
-              bottom: 8,
-              right: 8,
-              child: GestureDetector(
-                onTap: () {
-                  // TODO: Implementar upload de foto
-                  _showPhotoOptions();
-                },
-                child: Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppColors.primary,
-                    border: Border.all(color: Colors.white, width: 3),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.2),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Icon(Icons.camera_alt, size: 18, color: Colors.white),
+                child: Icon(
+                  Icons.person,
+                  size: size * 0.4,
+                  color: AppColors.primary,
                 ),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Text(
-          'Foto do perfil',
-          style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
-        ),
-      ],
+              Positioned(
+                bottom: 8,
+                right: 8,
+                child: GestureDetector(
+                  onTap: _showPhotoOptions,
+                  child: Container(
+                    width: size * 0.3,
+                    height: size * 0.3,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppColors.primary,
+                      border: Border.all(color: Colors.white, width: 3),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.2),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Icon(
+                      Icons.camera_alt,
+                      size: size * 0.15,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Foto do perfil',
+            style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+          ),
+        ],
+      ),
     );
   }
 
@@ -281,8 +322,6 @@ class _UsuarioFormScreenState extends State<UsuarioFormScreen> {
           style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
         ),
         const SizedBox(height: 20),
-
-        // Nome
         _buildTextField(
           controller: _nomeController,
           focusNode: _nomeFocusNode,
@@ -304,8 +343,6 @@ class _UsuarioFormScreenState extends State<UsuarioFormScreen> {
           },
         ),
         const SizedBox(height: 16),
-
-        // Email
         _buildTextField(
           controller: _emailController,
           focusNode: _emailFocusNode,
@@ -328,8 +365,6 @@ class _UsuarioFormScreenState extends State<UsuarioFormScreen> {
           },
         ),
         const SizedBox(height: 16),
-
-        // Telefone
         _buildTextField(
           controller: _telefoneController,
           focusNode: _telefoneFocusNode,
@@ -361,16 +396,10 @@ class _UsuarioFormScreenState extends State<UsuarioFormScreen> {
           style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
         ),
         const SizedBox(height: 20),
-
-        // Perfil
         _buildPerfilDropdown(perfilController),
         const SizedBox(height: 20),
-
-        // Status
         _buildStatusSwitch(),
         const SizedBox(height: 16),
-
-        // Email Verificado
         _buildEmailVerificadoSwitch(),
       ],
     );
@@ -494,7 +523,6 @@ class _UsuarioFormScreenState extends State<UsuarioFormScreen> {
                 ),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16),
               ),
-              // ✅ CORREÇÃO ALTERNATIVA: Usando texto simples sem Column
               items: controller.perfisAtivos.map((perfil) {
                 return DropdownMenuItem<PerfilUsuario>(
                   value: perfil,
@@ -522,7 +550,6 @@ class _UsuarioFormScreenState extends State<UsuarioFormScreen> {
               },
               isExpanded: true,
             ),
-            // ✅ Adicionando a descrição como um texto separado abaixo do dropdown
             if (_perfilSelecionado != null) ...[
               const SizedBox(height: 8),
               Text(
@@ -795,7 +822,6 @@ class _UsuarioFormScreenState extends State<UsuarioFormScreen> {
               title: Text('Escolher da galeria'),
               onTap: () {
                 Navigator.pop(context);
-                // TODO: Implementar seleção da galeria
               },
             ),
             ListTile(
@@ -803,7 +829,6 @@ class _UsuarioFormScreenState extends State<UsuarioFormScreen> {
               title: Text('Tirar foto'),
               onTap: () {
                 Navigator.pop(context);
-                // TODO: Implementar câmera
               },
             ),
             const SizedBox(height: 16),

@@ -1,11 +1,12 @@
 // services/perfil/perfil_service.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:projeto_padrao/core/constants/app_constants.dart';
 import 'package:projeto_padrao/models/perfil_usuario.dart';
 import 'package:projeto_padrao/enums/permissao_usuario.dart';
 
 class PerfilService {
   final CollectionReference _perfisCollection = FirebaseFirestore.instance
-      .collection('perfis');
+      .collection(AppConstants.permissionsCollection);
 
   Future<List<PerfilUsuario>> getPerfis({
     int page = 1,

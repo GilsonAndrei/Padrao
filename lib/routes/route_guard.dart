@@ -1,5 +1,7 @@
 // routes/route_guard.dart
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:projeto_padrao/core/themes/app_colors.dart';
 import 'package:projeto_padrao/enums/permissao_usuario.dart';
 import 'package:projeto_padrao/models/usuario.dart';
 import 'package:projeto_padrao/services/session/session_service.dart';
@@ -9,271 +11,173 @@ import '../views/auth/login_screen.dart';
 import '../views/home/home_screen.dart';
 
 class RouteGuard {
-  // Tela de Splash - CORRIGIDO
+  static bool _isInitialCheck = false;
+
+  // Tela de Splash - AGORA É "PREPARANDO AMBIENTE"
   static Widget splashScreen() {
-    return Consumer<AuthController>(
-      builder: (context, authController, _) {
-        print('🔄 [ROUTE_GUARD] Verificando estado da sessão...');
-        print(
-          '👤 [ROUTE_GUARD] Usuário logado: ${authController.usuarioLogado != null}',
-        );
-        print('⏳ [ROUTE_GUARD] Carregando: ${authController.isLoading}');
-
-        // ✅ SE JÁ CARREGOU: Decide imediatamente
-        if (!authController.isLoading) {
-          if (authController.usuarioLogado != null) {
-            print('✅ [ROUTE_GUARD] Usuário LOGADO - Redirecionando para HOME');
-            return const HomePage();
-          } else {
-            print(
-              '🔐 [ROUTE_GUARD] Usuário NÃO LOGADO - Redirecionando para LOGIN',
-            );
-            return LoginScreen();
-          }
-        }
-
-        // ✅ SE AINDA ESTÁ CARREGANDO: Mostra splash com timeout
-        return _SplashWithTimeout(authController: authController);
-      },
-    );
-  }
-
-  // Widget com timeout para evitar travamento
-  static Widget _SplashWithTimeout({required AuthController authController}) {
-    return FutureBuilder(
-      future: Future.delayed(
-        const Duration(seconds: 10),
-      ), // Timeout de 10 segundos
-      builder: (context, snapshot) {
-        // Se passou o timeout, força decisão
-        if (snapshot.connectionState == ConnectionState.done) {
-          print('⏰ [ROUTE_GUARD] Timeout - Forçando decisão');
-
-          if (authController.usuarioLogado != null) {
-            return const HomePage();
-          } else {
-            return LoginScreen();
-          }
-        }
-
-        // Enquanto espera, mostra splash normal
-        return _buildSplashScreen();
-      },
-    );
-  }
-
-  // Tela de Loading
-  static Widget _buildLoadingScreen(String message) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 20),
-            Text(message),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // Rota protegida - CORRIGIDA
-  static Widget protectedRoute({
-    required Widget child,
-    List<PermissaoUsuario> requiredPermissions = const [],
-    bool requireAuth = true,
-  }) {
-    return Consumer<AuthController>(
-      builder: (context, authController, _) {
-        // 👇 REGISTRAR ATIVIDADE DO USUÁRIO
-        authController.recordUserActivity();
-        SessionService.updateLastActivity();
-
-        // Verificações simplificadas
-        if (requireAuth && authController.usuarioLogado == null) {
-          return LoginScreen();
-        }
-
-        if (requireAuth && !authController.usuarioLogado!.ativo) {
-          return _buildAccessDeniedScreen(
-            context,
-            'Conta desativada',
-          ); // ✅ CORRIGIDO
-        }
-
-        // Verificação de permissões
-        if (requireAuth && requiredPermissions.isNotEmpty) {
-          final hasPermission = _checkPermissions(
-            authController.usuarioLogado!,
-            requiredPermissions,
-          );
-
-          if (!hasPermission) {
-            _logSecurityEvent(
-              'Tentativa de acesso não autorizado',
-              authController.usuarioLogado!,
-            );
-            return _buildAccessDeniedScreen(
-              context,
-              'Permissão negada',
-            ); // ✅ CORRIGIDO
-          }
-        }
-
-        return child;
-      },
-    );
-  }
-
-  static bool _checkPermissions(
-    Usuario usuario,
-    List<PermissaoUsuario> required,
-  ) {
-    return required.every(
-      (permission) => usuario.perfil.permissoes.contains(permission),
-    );
-  }
-
-  static void _logSecurityEvent(String event, Usuario usuario) {
-    print('🔒 [SEGURANÇA] $event - Usuário: ${usuario.email}');
-  }
-
-  // Tela de Splash
-  static Widget _buildSplashScreen() {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            FlutterLogo(size: 100),
-            const SizedBox(height: 20),
-            const Text(
-              'Sistema Padrão',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.blue,
-              ),
-            ),
-            const SizedBox(height: 20),
-            const CircularProgressIndicator(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // Tela de Acesso Negado - CORRIGIDA (adicionado parâmetro context)
-  static Widget _buildAccessDeniedScreen(BuildContext context, String message) {
-    // ✅ CORRIGIDO
-    return Scaffold(
-      appBar: AppBar(title: const Text('Acesso Negado')),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.block, size: 80, color: Colors.red),
-            const SizedBox(height: 20),
-            Text(
-              message,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () {
-                // Navega para home
-                Navigator.of(context).pushReplacementNamed('/home');
-              },
-              child: const Text('Voltar'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  static bool hasPermission(
-    BuildContext context,
-    List<PermissaoUsuario> requiredPermissions,
-  ) {
-    final authController = Provider.of<AuthController>(context, listen: false);
-    if (authController.usuarioLogado == null) return false;
-
-    return requiredPermissions.every(
-      (permission) =>
-          authController.usuarioLogado!.perfil.permissoes.contains(permission),
-    );
-  }
-}
-
-/*// routes/route_guard.dart
-import 'package:flutter/material.dart';
-import 'package:projeto_padrao/enums/permissao_usuario.dart';
-import 'package:projeto_padrao/models/usuario.dart';
-import 'package:projeto_padrao/services/session/session_service.dart';
-import 'package:provider/provider.dart';
-import '../controllers/auth/auth_controller.dart';
-import '../views/auth/login_screen.dart';
-import '../views/home/home_screen.dart';
-
-class RouteGuard {
-  // Tela de Splash - Decide para onde redirecionar
-  static Widget splashScreen() {
-    return FutureBuilder(
-      future: Future.delayed(const Duration(seconds: 2)),
+    return FutureBuilder<bool>(
+      future: _initializeApp(),
       builder: (context, snapshot) {
         final authController = Provider.of<AuthController>(
           context,
           listen: false,
         );
 
-        print('🔄 [ROUTE_GUARD] Verificando estado da sessão...');
-        print(
-          '👤 [ROUTE_GUARD] Usuário logado: ${authController.usuarioLogado != null}',
-        );
-        print('⏳ [ROUTE_GUARD] Carregando: ${authController.isLoading}');
-
-        if (snapshot.connectionState == ConnectionState.done) {
-          if (authController.isLoading) {
-            // Ainda carregando, mostra loading
-            return _buildLoadingScreen('Verificando sessão...');
-          }
-
-          if (authController.usuarioLogado != null) {
-            print('✅ [ROUTE_GUARD] Redirecionando para HOME');
-            return const HomePage();
-          } else {
-            print('🔐 [ROUTE_GUARD] Redirecionando para LOGIN');
-            return LoginScreen();
-          }
+        if (kDebugMode) {
+          print('🔄 [ROUTE_GUARD] Estado: ${snapshot.connectionState}');
+          print(
+            '👤 [ROUTE_GUARD] Usuário: ${authController.usuarioLogado != null}',
+          );
+          print('⏳ [ROUTE_GUARD] Carregando: ${authController.isLoading}');
         }
 
-        return _buildSplashScreen();
+        // Mostra splash enquanto inicializa
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return _buildEnvironmentLoadingScreen();
+        }
+
+        if (snapshot.hasError) {
+          if (kDebugMode) {
+            print('❌ [ROUTE_GUARD] Erro na inicialização: ${snapshot.error}');
+          }
+          return LoginScreen();
+        }
+
+        // Verifica se tem usuário logado após inicialização
+        if (authController.usuarioLogado != null && !authController.isLoading) {
+          if (kDebugMode) {
+            print('✅ [ROUTE_GUARD] Redirecionando para HOME');
+          }
+          return const HomePage();
+        } else {
+          if (kDebugMode) {
+            print('🔐 [ROUTE_GUARD] Redirecionando para LOGIN');
+          }
+          return LoginScreen();
+        }
       },
     );
   }
 
-  // Tela de Loading
-  static Widget _buildLoadingScreen(String message) {
+  // 🎭 TELA DE "PREPARANDO AMBIENTE"
+  static Widget _buildEnvironmentLoadingScreen() {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.background,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 20),
-            Text(message),
+            // 🔹 Logo do Sistema
+            Container(
+              width: 100,
+              height: 100,
+              decoration: BoxDecoration(
+                gradient: AppColors.primaryGradient,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primary.withOpacity(0.3),
+                    blurRadius: 15,
+                    spreadRadius: 2,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.security_rounded,
+                color: Colors.white,
+                size: 48,
+              ),
+            ),
+
+            const SizedBox(height: 32),
+
+            Text(
+              'Sistema Padrão',
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+                letterSpacing: -0.5,
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            Text(
+              'Preparando ambiente...',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textSecondary,
+              ),
+            ),
+
+            const SizedBox(height: 8),
+
+            Text(
+              'Carregando permissões e configurações',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w400,
+                color: AppColors.textDisabled,
+              ),
+            ),
+
+            const SizedBox(height: 32),
+
+            // 🔹 Loading específico para ambiente
+            SizedBox(
+              width: 120,
+              child: Column(
+                children: [
+                  LinearProgressIndicator(
+                    backgroundColor: AppColors.borderLight,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      AppColors.primary,
+                    ),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Verificando acesso...',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                      color: AppColors.textDisabled,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  // Rota protegida - Verifica autenticação e permissões
+  // 🔄 INICIALIZAÇÃO DO APP
+  static Future<bool> _initializeApp() async {
+    if (_isInitialCheck) return false;
+    _isInitialCheck = true;
+
+    if (kDebugMode) {
+      print('🚀 [ROUTE_GUARD] Preparando ambiente...');
+    }
+
+    try {
+      // Simula carregamento de permissões e configurações
+      await Future.delayed(const Duration(milliseconds: 1500));
+      return true;
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ [ROUTE_GUARD] Erro ao preparar ambiente: $e');
+      }
+      return false;
+    }
+  }
+
+  // Rota protegida
   static Widget protectedRoute({
     required Widget child,
     List<PermissaoUsuario> requiredPermissions = const [],
@@ -282,8 +186,16 @@ class RouteGuard {
   }) {
     return Consumer<AuthController>(
       builder: (context, authController, _) {
-        // 👇 REGISTRAR ATIVIDADE DO USUÁRIO
-        authController.recordUserActivity();
+        // Se ainda está carregando, mostra loading
+        if (authController.isLoading) {
+          return _buildLoadingScreen('Verificando acesso...');
+        }
+
+        // 👇 REGISTRAR ATIVIDADE APENAS SE JÁ ESTIVER LOGADO
+        if (authController.usuarioLogado != null) {
+          authController.recordUserActivity();
+        }
+
         // Verifica se a sessão expirou
         if (checkSession && SessionService.isSessionExpired()) {
           _forceLogout(context, authController);
@@ -293,7 +205,7 @@ class RouteGuard {
         // Atualiza atividade do usuário
         SessionService.updateLastActivity();
 
-        // Verificações existentes...
+        // Verificações de autenticação
         if (requireAuth && authController.usuarioLogado == null) {
           return LoginScreen();
         }
@@ -302,7 +214,7 @@ class RouteGuard {
           return _buildAccessDeniedScreen('Conta desativada');
         }
 
-        // Verificação de permissões melhorada
+        // Verificação de permissões
         if (requireAuth && requiredPermissions.isNotEmpty) {
           final hasPermission = _checkPermissions(
             authController.usuarioLogado!,
@@ -323,6 +235,41 @@ class RouteGuard {
     );
   }
 
+  // 🎨 TELA DE LOADING ESTILIZADA
+  static Widget _buildLoadingScreen(String message) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                gradient: AppColors.primaryGradient,
+                shape: BoxShape.circle,
+              ),
+              child: const CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                strokeWidth: 3,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              message,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   static bool _checkPermissions(
     Usuario usuario,
     List<PermissaoUsuario> required,
@@ -340,63 +287,51 @@ class RouteGuard {
       authController.logout();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Sessão expirada. Faça login novamente.'),
-          backgroundColor: Colors.orange,
+          content: const Text('Sessão expirada. Faça login novamente.'),
+          backgroundColor: AppColors.warning,
+          behavior: SnackBarBehavior.floating,
         ),
       );
     });
   }
 
   static void _logSecurityEvent(String event, Usuario usuario) {
-    print('🔒 [SEGURANÇA] $event - Usuário: ${usuario.email}');
-    // Aqui você pode enviar para um serviço de logging
+    if (kDebugMode) {
+      print('🔒 [SEGURANÇA] $event - Usuário: ${usuario.email}');
+    }
   }
 
-  // Tela de Splash
-  static Widget _buildSplashScreen() {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            FlutterLogo(size: 100),
-            const SizedBox(height: 20),
-            const Text(
-              'Sistema Padrão',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.blue,
-              ),
-            ),
-            const SizedBox(height: 20),
-            const CircularProgressIndicator(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // Tela de Acesso Negado
   static Widget _buildAccessDeniedScreen(String message) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Acesso Negado')),
+      appBar: AppBar(
+        title: const Text('Acesso Negado'),
+        backgroundColor: AppColors.error,
+        foregroundColor: Colors.white,
+      ),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.block, size: 80, color: Colors.red),
+            Icon(Icons.block_rounded, size: 80, color: AppColors.error),
             const SizedBox(height: 20),
             Text(
               message,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textPrimary,
+              ),
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: () {
                 // Navega para home ou login
               },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+              ),
               child: const Text('Voltar'),
             ),
           ],
@@ -405,7 +340,6 @@ class RouteGuard {
     );
   }
 
-  // Verifica se usuário tem permissão
   static bool hasPermission(
     BuildContext context,
     List<PermissaoUsuario> requiredPermissions,
@@ -420,47 +354,3 @@ class RouteGuard {
     );
   }
 }
-
-*/
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/* EXEMPLO DE USO: // Exemplo de uso em botões ou navegação
-ElevatedButton(
-  onPressed: () {
-    // Navegação simples
-    NavigationService.navigateTo(AppRoutes.home);
-    
-    // Navegação com verificação de permissão
-    if (RouteGuard.hasPermission(context, [PermissaoUsuario.visualizarCadastro])) {
-      NavigationService.navigateTo(AppRoutes.customers);
-    }
-  },
-  child: const Text('Navegar'),
-),
-
-// Em uma rota específica com permissões
-RouteGuard.protectedRoute(
-  child: const CustomersScreen(),
-  requiredPermissions: [PermissaoUsuario.visualizarCadastro],
-),*/

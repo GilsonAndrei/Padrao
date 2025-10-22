@@ -1,5 +1,6 @@
 // services/firestore_service.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:projeto_padrao/core/constants/app_constants.dart';
 import '../models/usuario.dart';
 import '../models/perfil_usuario.dart';
 import '../enums/permissao_usuario.dart';
@@ -13,7 +14,7 @@ class FirestoreService {
       print('💾 [FIRESTORE] Salvando usuário: ${usuario.id}');
 
       await _firestore
-          .collection('usuarios')
+          .collection(AppConstants.usersCollection)
           .doc(usuario.id)
           .set(usuario.toMap());
 
@@ -30,7 +31,7 @@ class FirestoreService {
       print('🔍 [FIRESTORE] Buscando usuário com ID: $userId');
 
       DocumentSnapshot userDoc = await _firestore
-          .collection('usuarios')
+          .collection(AppConstants.usersCollection)
           .doc(userId)
           .get();
 
@@ -61,7 +62,10 @@ class FirestoreService {
   // Deletar usuário
   Future<void> deleteUser(String userId) async {
     try {
-      await _firestore.collection('usuarios').doc(userId).delete();
+      await _firestore
+          .collection(AppConstants.usersCollection)
+          .doc(userId)
+          .delete();
       print('✅ [FIRESTORE] Usuário deletado: $userId');
     } catch (e) {
       print('❌ [FIRESTORE] Erro ao deletar usuário: $e');
@@ -73,7 +77,7 @@ class FirestoreService {
   Future<bool> userExists(String userId) async {
     try {
       DocumentSnapshot doc = await _firestore
-          .collection('usuarios')
+          .collection(AppConstants.usersCollection)
           .doc(userId)
           .get();
       return doc.exists;

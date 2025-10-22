@@ -1,5 +1,6 @@
 // services/usuario_service.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:projeto_padrao/core/constants/app_constants.dart';
 import 'package:projeto_padrao/models/usuario.dart';
 import 'package:projeto_padrao/models/perfil_usuario.dart';
 import 'package:projeto_padrao/enums/permissao_usuario.dart';
@@ -7,7 +8,7 @@ import 'package:projeto_padrao/enums/permissao_usuario.dart';
 class UsuarioService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final CollectionReference _usuariosCollection = FirebaseFirestore.instance
-      .collection('usuarios');
+      .collection(AppConstants.usersCollection);
 
   Future<List<Usuario>> getUsuarios() async {
     try {
