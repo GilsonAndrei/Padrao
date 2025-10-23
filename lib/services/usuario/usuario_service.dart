@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:projeto_padrao/core/constants/app_constants.dart';
 import 'package:projeto_padrao/models/usuario.dart';
 import 'package:projeto_padrao/models/perfil_usuario.dart';
+import 'package:projeto_padrao/models/paginated_response.dart';
 import 'package:projeto_padrao/enums/permissao_usuario.dart';
 import 'package:projeto_padrao/services/auth/auth_service.dart';
 
@@ -10,25 +11,225 @@ class UsuarioService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final CollectionReference _usuariosCollection = FirebaseFirestore.instance
       .collection(AppConstants.usersCollection);
-  final AuthService _authService = AuthService(); // ✅ INSTÂNCIA DO AUTH SERVICE
+  final AuthService _authService = AuthService();
 
-  Future<List<Usuario>> getUsuarios() async {
+  // ✅ MÉTODO UNIFICADO PARA BUSCA PAGINADA
+  Future<PaginatedResponse<Usuario>> searchUsuarios({
+    String searchTerm = '',
+    int page = 1,
+    int pageSize = 20,
+    bool apenasAtivos = true,
+    String orderByField = 'nome',
+    bool descending = false,
+  }) async {
     try {
-      final querySnapshot = await _usuariosCollection
-          .orderBy('dataCriacao', descending: true)
-          .get();
+      // ✅ VALIDAÇÃO DE PARÂMETROS
+      if (page < 1) throw ArgumentError('Page deve ser maior que 0');
+      final effectiveLimit = pageSize > 0 ? pageSize : 20;
 
-      return querySnapshot.docs.map((doc) {
+      Query query = _usuariosCollection;
+
+      // ✅ APLICAR FILTROS
+      if (apenasAtivos) {
+        query = query.where('ativo', isEqualTo: true);
+      }
+
+      if (searchTerm.isNotEmpty) {
+        query = query
+            .where('nome', isGreaterThanOrEqualTo: searchTerm)
+            .where('nome', isLessThan: searchTerm + 'z');
+      }
+
+      // ✅ ORDENAÇÃO E LIMITE
+      query = query
+          .orderBy(orderByField, descending: descending)
+          .limit(effectiveLimit);
+
+      // ✅ PAGINAÇÃO
+      if (page > 1) {
+        Query previousPageQuery = _usuariosCollection;
+
+        if (apenasAtivos) {
+          previousPageQuery = previousPageQuery.where('ativo', isEqualTo: true);
+        }
+
+        if (searchTerm.isNotEmpty) {
+          previousPageQuery = previousPageQuery
+              .where('nome', isGreaterThanOrEqualTo: searchTerm)
+              .where('nome', isLessThan: searchTerm + 'z');
+        }
+
+        final previousQuery = previousPageQuery
+            .orderBy(orderByField, descending: descending)
+            .limit((page - 1) * effectiveLimit);
+
+        final previousSnapshot = await previousQuery.get();
+        if (previousSnapshot.docs.isNotEmpty) {
+          final lastDoc = previousSnapshot.docs.last;
+          query = query.startAfterDocument(lastDoc);
+        }
+      }
+
+      // ✅ EXECUTAR CONSULTA
+      final querySnapshot = await query.get();
+
+      // ✅ CALCULAR TOTAL DE ITENS
+      Query totalQuery = _usuariosCollection;
+
+      if (apenasAtivos) {
+        totalQuery = totalQuery.where('ativo', isEqualTo: true);
+      }
+
+      if (searchTerm.isNotEmpty) {
+        totalQuery = totalQuery
+            .where('nome', isGreaterThanOrEqualTo: searchTerm)
+            .where('nome', isLessThan: searchTerm + 'z');
+      }
+
+      final totalSnapshot = await totalQuery.count().get();
+      final totalItems = totalSnapshot.count;
+      final totalPages = (totalItems! / effectiveLimit).ceil();
+
+      // ✅ CONVERTER RESULTADOS
+      final items = querySnapshot.docs.map((doc) {
         final data = doc.data() as Map<String, dynamic>;
         return _usuarioFromFirestore(doc.id, data);
       }).toList();
+
+      // ✅ CORREÇÃO: Usando o construtor padrão (não precisa do 'numeric')
+      return PaginatedResponse<Usuario>(
+        items: items,
+        currentPage: page,
+        totalPages: totalPages,
+        totalItems: totalItems,
+        hasNextPage: page < totalPages,
+      );
+    } catch (e) {
+      throw Exception('Erro ao buscar usuários: $e');
+    }
+  }
+
+  // ✅ MÉTODO PARA PAGINAÇÃO BASEADA EM CURSOR
+  Future<PaginatedResponse<Usuario>> searchUsuariosWithCursor({
+    String searchTerm = '',
+    DocumentSnapshot? lastDocument,
+    int limit = 20,
+    bool apenasAtivos = true,
+    String orderByField = 'nome',
+    bool descending = false,
+  }) async {
+    try {
+      final effectiveLimit = limit > 0 ? limit : 20;
+
+      Query query = _usuariosCollection;
+
+      // ✅ APLICAR FILTROS
+      if (apenasAtivos) {
+        query = query.where('ativo', isEqualTo: true);
+      }
+
+      if (searchTerm.isNotEmpty) {
+        query = query
+            .where('nome', isGreaterThanOrEqualTo: searchTerm)
+            .where('nome', isLessThan: searchTerm + 'z');
+      }
+
+      // ✅ ORDENAÇÃO E LIMITE
+      query = query
+          .orderBy(orderByField, descending: descending)
+          .limit(effectiveLimit);
+
+      // ✅ APLICAR CURSOR PARA PAGINAÇÃO
+      if (lastDocument != null) {
+        query = query.startAfterDocument(lastDocument);
+      }
+
+      // ✅ EXECUTAR CONSULTA
+      final querySnapshot = await query.get();
+
+      // ✅ CONVERTER RESULTADOS
+      final items = querySnapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return _usuarioFromFirestore(doc.id, data);
+      }).toList();
+
+      // ✅ CORREÇÃO: Usando o construtor cursorBased
+      return PaginatedResponse<Usuario>.cursorBased(
+        items: items,
+        hasNextPage: items.length == effectiveLimit,
+        lastDocument: querySnapshot.docs.isNotEmpty
+            ? querySnapshot.docs.last
+            : null,
+        hasPreviousPage: lastDocument != null,
+      );
+    } catch (e) {
+      throw Exception('Erro ao buscar usuários: $e');
+    }
+  }
+
+  // ✅ MÉTODOS DE CONVENIÊNCIA
+  Future<PaginatedResponse<Usuario>> searchUsuariosAtivos({
+    String searchTerm = '',
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    return searchUsuarios(
+      searchTerm: searchTerm,
+      page: page,
+      pageSize: pageSize,
+      apenasAtivos: true,
+    );
+  }
+
+  Future<PaginatedResponse<Usuario>> searchUsuariosAtivosWithCursor({
+    String searchTerm = '',
+    DocumentSnapshot? lastDocument,
+    int limit = 20,
+  }) async {
+    return searchUsuariosWithCursor(
+      searchTerm: searchTerm,
+      lastDocument: lastDocument,
+      limit: limit,
+      apenasAtivos: true,
+    );
+  }
+
+  // ✅ MÉTODO LEGADO (mantido para compatibilidade)
+  Future<List<Usuario>> getUsuarios({
+    int page = 1,
+    int limit = 20,
+    DocumentSnapshot? lastDocument,
+  }) async {
+    try {
+      final response = await searchUsuariosWithCursor(
+        lastDocument: lastDocument,
+        limit: limit,
+      );
+      return response.items;
     } catch (e) {
       throw Exception('Erro ao carregar usuários: $e');
     }
   }
 
+  // ✅ MÉTODO PARA CONTAGEM TOTAL
+  Future<int> getTotalUsuarios({bool apenasAtivos = true}) async {
+    try {
+      Query query = _usuariosCollection;
+
+      if (apenasAtivos) {
+        query = query.where('ativo', isEqualTo: true);
+      }
+
+      final countQuery = await query.count().get();
+      return countQuery.count ?? 0;
+    } catch (e) {
+      print('Erro ao contar usuários: $e');
+      return 0;
+    }
+  }
+
+  // ... (o restante do código permanece igual - métodos save, delete, conversões, etc.)
   // ✅ MÉTODO ATUALIZADO: Salvar usuário com suporte a senha
-  // ✅ MÉTODO PRINCIPAL: Salvar usuário (sempre usa Cloud Function para novos)
   Future<void> saveUsuario(Usuario usuario, {String? senha}) async {
     try {
       if (usuario.id.isEmpty || usuario.id == 'null') {
@@ -96,7 +297,9 @@ class UsuarioService {
       ultimoAcesso: _timestampToDateTime(data['ultimoAcesso']),
       ativo: data['ativo'] ?? true,
       emailVerificado: data['emailVerificado'] ?? false,
-      isAdmin: false,
+      isAdmin: data['isAdmin'] ?? false,
+      temSenhaDefinida: data['temSenhaDefinida'] ?? false,
+      uidFirebase: data['uidFirebase'],
     );
   }
 
@@ -125,7 +328,6 @@ class UsuarioService {
   }
 
   // ✅ CONVERTE Usuario para Firestore
-  // ✅ CONVERTE Usuario para Firestore (ATUALIZADO)
   Map<String, dynamic> _usuarioToFirestore(Usuario usuario) {
     return {
       'nome': usuario.nome,
@@ -136,8 +338,8 @@ class UsuarioService {
       'ativo': usuario.ativo,
       'emailVerificado': usuario.emailVerificado,
       'isAdmin': usuario.isAdmin,
-      'temSenhaDefinida': usuario.temSenhaDefinida ?? false, // ✅ SALVAR FLAG
-      'uidFirebase': usuario.uidFirebase, // ✅ SALVAR UID FIREBASE
+      'temSenhaDefinida': usuario.temSenhaDefinida ?? false,
+      'uidFirebase': usuario.uidFirebase,
     };
   }
 

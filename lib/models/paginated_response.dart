@@ -42,6 +42,23 @@ class PaginatedResponse<T> {
     );
   }
 
+  // ✅ CONSTRUTOR PARA PAGINAÇÃO NUMÉRICA (ADICIONADO)
+  factory PaginatedResponse.numeric({
+    required List<T> items,
+    required int currentPage,
+    required int totalPages,
+    required int totalItems,
+    required bool hasNextPage,
+  }) {
+    return PaginatedResponse<T>(
+      items: items,
+      currentPage: currentPage,
+      totalPages: totalPages,
+      totalItems: totalItems,
+      hasNextPage: hasNextPage,
+    );
+  }
+
   // ✅ MÉTODO PARA CONVERSÃO DE/PARA JSON
   factory PaginatedResponse.fromJson(
     Map<String, dynamic> json,
