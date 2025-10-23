@@ -166,13 +166,13 @@ class AppTheme {
     );
   }
 
-  // ✅ AppBar com ícone de deletar destacado
+  // ✅ AppBar com ícone de deletar destacado (CORRIGIDO)
   static AppBar createGradientAppBarWithDelete({
     required String title,
     required VoidCallback onDelete,
     bool isDeleting = false,
     bool showDelete = true,
-    List<Widget>? additionalActions,
+    List<Widget>? actions, // ✅ CORREÇÃO: Adicionado parâmetro actions
     bool? automaticallyImplyLeading = true,
     Widget? leading,
   }) {
@@ -187,7 +187,10 @@ class AppTheme {
         ),
       ),
       actions: [
-        if (additionalActions != null) ...additionalActions,
+        // ✅ Primeiro os actions customizados
+        if (actions != null) ...actions,
+
+        // ✅ Depois o botão de deletar
         if (showDelete) ...[
           IconButton(
             icon: Container(

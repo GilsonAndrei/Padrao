@@ -11,6 +11,7 @@ class FirestoreService {
   // Salva/Atualiza um usuário no Firestore
   Future<void> saveUser(Usuario usuario) async {
     try {
+      
       print('💾 [FIRESTORE] Salvando usuário: ${usuario.id}');
 
       await _firestore

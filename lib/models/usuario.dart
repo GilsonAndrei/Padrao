@@ -1,3 +1,4 @@
+// models/usuario.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:projeto_padrao/enums/permissao_usuario.dart';
@@ -15,7 +16,9 @@ class Usuario {
   final DateTime? ultimoAcesso;
   final bool ativo;
   final bool emailVerificado;
-  final bool isAdmin; // ✅ NOVO CAMPO: Identifica se é administrador
+  final bool isAdmin;
+  final bool? temSenhaDefinida; // ✅ NOVO: Indica se já tem senha definida
+  final String? uidFirebase; // ✅ NOVO: ID do Firebase Auth
 
   Usuario({
     required this.id,
@@ -29,7 +32,9 @@ class Usuario {
     this.ultimoAcesso,
     required this.ativo,
     required this.emailVerificado,
-    required this.isAdmin, // ✅ NOVO PARÂMETRO
+    required this.isAdmin,
+    this.temSenhaDefinida, // ✅ NOVO PARÂMETRO
+    this.uidFirebase, // ✅ NOVO PARÂMETRO
   });
 
   // Converte para Map
@@ -46,7 +51,9 @@ class Usuario {
       'ultimoAcesso': ultimoAcesso?.millisecondsSinceEpoch,
       'ativo': ativo,
       'emailVerificado': emailVerificado,
-      'isAdmin': isAdmin, // ✅ SALVA NO BANCO
+      'isAdmin': isAdmin,
+      'temSenhaDefinida': temSenhaDefinida, // ✅ SALVA NO BANCO
+      'uidFirebase': uidFirebase, // ✅ SALVA NO BANCO
     };
   }
 
@@ -68,7 +75,9 @@ class Usuario {
       ultimoAcesso: _parseDateTime(map['ultimoAcesso']),
       ativo: map['ativo'] ?? true,
       emailVerificado: map['emailVerificado'] ?? false,
-      isAdmin: map['isAdmin'] ?? false, // ✅ LÊ DO BANCO (default: false)
+      isAdmin: map['isAdmin'] ?? false,
+      temSenhaDefinida: map['temSenhaDefinida'] ?? false, // ✅ LÊ DO BANCO
+      uidFirebase: map['uidFirebase']?.toString(), // ✅ LÊ DO BANCO
     );
   }
 
@@ -95,7 +104,9 @@ class Usuario {
     DateTime? ultimoAcesso,
     bool? ativo,
     bool? emailVerificado,
-    bool? isAdmin, // ✅ NOVO PARÂMETRO NO COPYWITH
+    bool? isAdmin,
+    bool? temSenhaDefinida, // ✅ NOVO PARÂMETRO
+    String? uidFirebase, // ✅ NOVO PARÂMETRO
   }) {
     return Usuario(
       id: id ?? this.id,
@@ -109,9 +120,19 @@ class Usuario {
       ultimoAcesso: ultimoAcesso ?? this.ultimoAcesso,
       ativo: ativo ?? this.ativo,
       emailVerificado: emailVerificado ?? this.emailVerificado,
-      isAdmin: isAdmin ?? this.isAdmin, // ✅ COPIA O ISADMIN
+      isAdmin: isAdmin ?? this.isAdmin,
+      temSenhaDefinida: temSenhaDefinida ?? this.temSenhaDefinida,
+      uidFirebase: uidFirebase ?? this.uidFirebase,
     );
   }
+
+  // ✅ MÉTODOS PARA AUTENTICAÇÃO
+
+  // Verifica se o usuário pode fazer login (tem senha definida e está ativo)
+  bool get podeFazerLogin => (temSenhaDefinida ?? false) && ativo;
+
+  // Verifica se precisa definir senha
+  bool get precisaDefinirSenha => !(temSenhaDefinida ?? false);
 
   // ✅ MÉTODOS ÚTEIS PARA VERIFICAÇÃO DE PERMISSÕES
 
@@ -191,5 +212,17 @@ class Usuario {
   Color get corTipoUsuario {
     if (isAdmin) return Colors.red;
     return Colors.blue;
+  }
+
+  // ✅ MÉTODO PARA STATUS DE SENHA
+  String get statusSenha {
+    if (temSenhaDefinida ?? false) return 'Senha definida';
+    return 'Senha não definida';
+  }
+
+  // ✅ MÉTODO PARA COR DO STATUS DE SENHA
+  Color get corStatusSenha {
+    if (temSenhaDefinida ?? false) return Colors.green;
+    return Colors.orange;
   }
 }

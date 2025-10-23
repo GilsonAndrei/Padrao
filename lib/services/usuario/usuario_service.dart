@@ -4,11 +4,13 @@ import 'package:projeto_padrao/core/constants/app_constants.dart';
 import 'package:projeto_padrao/models/usuario.dart';
 import 'package:projeto_padrao/models/perfil_usuario.dart';
 import 'package:projeto_padrao/enums/permissao_usuario.dart';
+import 'package:projeto_padrao/services/auth/auth_service.dart';
 
 class UsuarioService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final CollectionReference _usuariosCollection = FirebaseFirestore.instance
       .collection(AppConstants.usersCollection);
+  final AuthService _authService = AuthService(); // ✅ INSTÂNCIA DO AUTH SERVICE
 
   Future<List<Usuario>> getUsuarios() async {
     try {
@@ -25,31 +27,47 @@ class UsuarioService {
     }
   }
 
-  Future<void> saveUsuario(Usuario usuario) async {
+  // ✅ MÉTODO ATUALIZADO: Salvar usuário com suporte a senha
+  // ✅ MÉTODO PRINCIPAL: Salvar usuário (sempre usa Cloud Function para novos)
+  Future<void> saveUsuario(Usuario usuario, {String? senha}) async {
     try {
-      final usuarioData = _usuarioToFirestore(usuario);
-
       if (usuario.id.isEmpty || usuario.id == 'null') {
-        // Novo usuário
-        final docRef = _usuariosCollection.doc();
-        await docRef.set({
-          ...usuarioData,
-          'dataCriacao': FieldValue.serverTimestamp(),
-          'dataAtualizacao': FieldValue.serverTimestamp(),
-        });
-      } else {
-        // Usuário existente
-        if (usuario.id.isNotEmpty && usuario.id != 'null') {
-          await _usuariosCollection.doc(usuario.id).update({
-            ...usuarioData,
-            'dataAtualizacao': FieldValue.serverTimestamp(),
-          });
+        // NOVO USUÁRIO - Usar Cloud Function
+        if (senha != null && senha.isNotEmpty) {
+          await _authService.criarUsuarioCompleto(
+            email: usuario.email,
+            senha: senha,
+            nome: usuario.nome,
+            perfil: usuario.perfil,
+            telefone: usuario.telefone,
+            isAdmin: usuario.isAdmin,
+          );
+          print('✅ [SERVICE] Usuário criado via Cloud Function');
         } else {
-          throw Exception('ID de usuário inválido: ${usuario.id}');
+          throw Exception('Para novo usuário, uma senha é obrigatória');
         }
+      } else {
+        // USUÁRIO EXISTENTE - Apenas atualizar Firestore
+        await _atualizarUsuarioFirestore(usuario);
       }
     } catch (e) {
       throw Exception('Erro ao salvar usuário: $e');
+    }
+  }
+
+  // ✅ MÉTODO PRIVADO: Atualizar apenas no Firestore
+  Future<void> _atualizarUsuarioFirestore(Usuario usuario) async {
+    try {
+      final usuarioData = _usuarioToFirestore(usuario);
+
+      await _usuariosCollection.doc(usuario.id).update({
+        ...usuarioData,
+        'dataAtualizacao': FieldValue.serverTimestamp(),
+      });
+
+      print('✅ [SERVICE] Usuário atualizado no Firestore: ${usuario.id}');
+    } catch (e) {
+      throw Exception('Erro ao atualizar usuário: $e');
     }
   }
 
@@ -107,6 +125,7 @@ class UsuarioService {
   }
 
   // ✅ CONVERTE Usuario para Firestore
+  // ✅ CONVERTE Usuario para Firestore (ATUALIZADO)
   Map<String, dynamic> _usuarioToFirestore(Usuario usuario) {
     return {
       'nome': usuario.nome,
@@ -116,6 +135,9 @@ class UsuarioService {
       'perfil': _perfilToFirestore(usuario.perfil),
       'ativo': usuario.ativo,
       'emailVerificado': usuario.emailVerificado,
+      'isAdmin': usuario.isAdmin,
+      'temSenhaDefinida': usuario.temSenhaDefinida ?? false, // ✅ SALVAR FLAG
+      'uidFirebase': usuario.uidFirebase, // ✅ SALVAR UID FIREBASE
     };
   }
 
@@ -165,5 +187,72 @@ class UsuarioService {
     } catch (e) {
       return null;
     }
+  }
+
+  // ✅ MÉTODO NOVO: Resetar senha do usuário
+  Future<void> resetarSenhaUsuario(String email) async {
+    try {
+      await _authService.resetarSenhaUsuario(email);
+    } catch (e) {
+      throw Exception('Erro ao resetar senha: $e');
+    }
+  }
+
+  // ✅ MÉTODO NOVO: Verificar se usuário tem senha definida
+  Future<bool> usuarioTemSenhaDefinida(String userId) async {
+    return await _authService.usuarioTemSenhaDefinida(userId);
+  }
+
+  // ✅ MÉTODO NOVO: Enviar convite para definir senha
+  Future<void> enviarConviteSenha(String email) async {
+    try {
+      await _authService.enviarConviteSenha(email);
+    } catch (e) {
+      throw Exception('Erro ao enviar convite: $e');
+    }
+  }
+
+  // ✅ MÉTODO: Inativar usuário (Auth + Firestore)
+  Future<void> inativarUsuario(String userId) async {
+    try {
+      print('🔄 [USUARIO SERVICE] Inativando usuário: $userId');
+      await _authService.inativarUsuario(userId);
+      print('✅ [USUARIO SERVICE] Usuário inativado com sucesso');
+    } catch (e) {
+      print('❌ [USUARIO SERVICE] Erro ao inativar usuário: $e');
+      rethrow;
+    }
+  }
+
+  // ✅ MÉTODO: Reativar usuário (Auth + Firestore)
+  Future<void> reativarUsuario(String userId) async {
+    try {
+      print('🔄 [USUARIO SERVICE] Reativando usuário: $userId');
+      await _authService.reativarUsuario(userId);
+      print('✅ [USUARIO SERVICE] Usuário reativado com sucesso');
+    } catch (e) {
+      print('❌ [USUARIO SERVICE] Erro ao reativar usuário: $e');
+      rethrow;
+    }
+  }
+
+  // ✅ MÉTODO: Alterar senha do usuário
+  Future<void> alterarSenhaUsuario(String userId, String novaSenha) async {
+    try {
+      print('🔐 [USUARIO SERVICE] Alterando senha do usuário: $userId');
+      await _authService.alterarSenhaUsuario(
+        userId: userId,
+        novaSenha: novaSenha,
+      );
+      print('✅ [USUARIO SERVICE] Senha alterada com sucesso');
+    } catch (e) {
+      print('❌ [USUARIO SERVICE] Erro ao alterar senha: $e');
+      rethrow;
+    }
+  }
+
+  // ✅ MÉTODO: Definir senha (alias para alterarSenhaUsuario)
+  Future<void> definirSenhaUsuario(String userId, String senha) async {
+    await alterarSenhaUsuario(userId, senha);
   }
 }

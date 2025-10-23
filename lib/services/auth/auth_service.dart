@@ -1,6 +1,7 @@
-// services/auth_service.dart
+import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:http/http.dart' as http;
 import 'package:projeto_padrao/core/constants/app_constants.dart';
 import 'package:projeto_padrao/core/utils/logger_service.dart';
 import 'package:projeto_padrao/enums/permissao_usuario.dart';
@@ -9,18 +10,254 @@ import '../../models/perfil_usuario.dart';
 import '../firestore_service.dart';
 
 class AuthService {
-  // Rate limiting básico
   static final Map<String, int> _loginAttempts = {};
   static const int MAX_LOGIN_ATTEMPTS = 5;
   static const Duration LOCKOUT_DURATION = Duration(minutes: 15);
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirestoreService _firestoreService = FirestoreService();
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   AuthService() {
-    // 👇 HABILITAR PERSISTÊNCIA
     _auth.setPersistence(Persistence.LOCAL);
     print('💾 [AUTH] Persistência local habilitada');
+  }
+
+  // ✅ VERIFICAR SE É ADMIN
+  Future<bool> _verificarSeEhAdmin() async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) return false;
+
+      final userDoc = await _firestore
+          .collection(AppConstants.usersCollection)
+          .doc(user.uid)
+          .get();
+
+      if (userDoc.exists) {
+        final userData = userDoc.data() as Map<String, dynamic>?;
+        return userData?['isAdmin'] == true;
+      }
+      return false;
+    } catch (e) {
+      print('❌ [SERVICE] Erro ao verificar admin: $e');
+      return false;
+    }
+  }
+
+  // ✅ MÉTODO: Obter token e fazer requisição HTTP
+  Future<Map<String, dynamic>> _fazerRequisicaoHTTP({
+    required String url,
+    required Map<String, dynamic> dados,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception('Usuário não autenticado');
+
+    final idToken = await user.getIdToken(true);
+
+    final response = await http.post(
+      Uri.parse(url),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $idToken',
+      },
+      body: jsonEncode(dados),
+    );
+
+    final data = jsonDecode(response.body);
+
+    if (response.statusCode == 200) {
+      return data;
+    } else {
+      throw Exception(data['error'] ?? 'Erro na requisição');
+    }
+  }
+
+  // ✅ CRIAR USUÁRIO
+  Future<Map<String, dynamic>> criarUsuarioCompleto({
+    required String email,
+    required String senha,
+    required String nome,
+    required PerfilUsuario perfil,
+    String? telefone,
+    bool isAdmin = false,
+  }) async {
+    try {
+      print('👤 [SERVICE] Criando usuário via HTTP: $email');
+
+      final ehAdmin = await _verificarSeEhAdmin();
+      if (!ehAdmin)
+        throw Exception('Apenas administradores podem criar usuários');
+
+      final perfilMap = {
+        'id': perfil.id,
+        'nome': perfil.nome,
+        'descricao': perfil.descricao,
+        'permissoes': perfil.permissoes.map((p) => p.codigo).toList(),
+        'ativo': perfil.ativo,
+        'dataCriacao': perfil.dataCriacao.millisecondsSinceEpoch,
+        'dataAtualizacao': perfil.dataAtualizacao?.millisecondsSinceEpoch,
+      };
+
+      final resultado = await _fazerRequisicaoHTTP(
+        url:
+            'https://us-central1-padrao-210e0.cloudfunctions.net/criarUsuarioCompleto',
+        dados: {
+          'email': email,
+          'senha': senha,
+          'nome': nome,
+          'telefone': telefone,
+          'perfil': perfilMap,
+          'isAdmin': isAdmin,
+        },
+      );
+
+      print('✅ [SERVICE] Usuário criado: ${resultado['userId']}');
+      return resultado;
+    } catch (e) {
+      print('❌ [SERVICE] Erro ao criar usuário: $e');
+      rethrow;
+    }
+  }
+
+  // ✅ ALTERAR SENHA
+  Future<void> alterarSenhaUsuario({
+    required String userId,
+    required String novaSenha,
+  }) async {
+    try {
+      print('🔐 [SERVICE] Alterando senha: $userId');
+
+      final ehAdmin = await _verificarSeEhAdmin();
+      if (!ehAdmin)
+        throw Exception('Apenas administradores podem alterar senhas');
+
+      await _fazerRequisicaoHTTP(
+        url:
+            'https://us-central1-padrao-210e0.cloudfunctions.net/alterarSenhaUsuario',
+        dados: {'userId': userId, 'novaSenha': novaSenha},
+      );
+
+      print('✅ [SERVICE] Senha alterada com sucesso');
+    } catch (e) {
+      print('❌ [SERVICE] Erro ao alterar senha: $e');
+      rethrow;
+    }
+  }
+
+  // ✅ ATUALIZAR STATUS (Ativar/Inativar)
+  Future<void> atualizarStatusUsuario({
+    required String userId,
+    required bool ativo,
+  }) async {
+    try {
+      print('🔄 [SERVICE] Atualizando status: $userId -> $ativo');
+
+      final ehAdmin = await _verificarSeEhAdmin();
+      if (!ehAdmin)
+        throw Exception('Apenas administradores podem alterar status');
+
+      await _fazerRequisicaoHTTP(
+        url:
+            'https://us-central1-padrao-210e0.cloudfunctions.net/atualizarStatusUsuario',
+        dados: {'userId': userId, 'ativo': ativo},
+      );
+
+      print('✅ [SERVICE] Status atualizado: $ativo');
+    } catch (e) {
+      print('❌ [SERVICE] Erro ao atualizar status: $e');
+      rethrow;
+    }
+  }
+
+  // ✅ INATIVAR USUÁRIO
+  Future<void> inativarUsuario(String userId) async {
+    await atualizarStatusUsuario(userId: userId, ativo: false);
+  }
+
+  // ✅ REATIVAR USUÁRIO
+  Future<void> reativarUsuario(String userId) async {
+    await atualizarStatusUsuario(userId: userId, ativo: true);
+  }
+
+  // ✅ TESTAR CONEXÃO
+  Future<void> testarConexaoCloudFunctions() async {
+    try {
+      final response = await http.get(
+        Uri.parse(
+          'https://us-central1-padrao-210e0.cloudfunctions.net/testeConexao',
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        print('✅ [SERVICE] Conexão OK: $data');
+      } else {
+        throw Exception('Erro na conexão');
+      }
+    } catch (e) {
+      print('❌ [SERVICE] Erro ao testar conexão: $e');
+      rethrow;
+    }
+  }
+
+  // ✅ MÉTODO PARA CRIAR USUÁRIO SIMPLES (mantido para compatibilidade)
+  Future<String> criarUsuarioComSenhaCloudFunction({
+    required String email,
+    required String senha,
+    required String nome,
+    required PerfilUsuario perfil,
+    String? telefone,
+    bool isAdmin = false,
+  }) async {
+    final result = await criarUsuarioCompleto(
+      email: email,
+      senha: senha,
+      nome: nome,
+      perfil: perfil,
+      telefone: telefone,
+      isAdmin: isAdmin,
+    );
+
+    return result['userId'] as String;
+  }
+
+  // MÉTODO LEGADO - Criar usuário diretamente (sem Cloud Function)
+  Future<Usuario?> criarUsuarioComSenha({
+    required String email,
+    required String senha,
+    required String nome,
+    required PerfilUsuario perfil,
+    String? telefone,
+    bool isAdmin = false,
+  }) async {
+    try {
+      final UserCredential userCredential = await _auth
+          .createUserWithEmailAndPassword(email: email.trim(), password: senha);
+
+      final User user = userCredential.user!;
+
+      final Usuario novoUsuario = Usuario(
+        id: user.uid,
+        nome: nome,
+        email: email.trim(),
+        telefone: telefone,
+        perfil: perfil,
+        dataCriacao: DateTime.now(),
+        ativo: true,
+        emailVerificado: false,
+        isAdmin: isAdmin,
+        temSenhaDefinida: true,
+        uidFirebase: user.uid,
+      );
+
+      await _firestoreService.saveUser(novoUsuario);
+      return novoUsuario;
+    } on FirebaseAuthException catch (e) {
+      rethrow;
+    } catch (e) {
+      rethrow;
+    }
   }
 
   // ✅ MÉTODO NOVO: Buscar usuário por email
@@ -28,7 +265,7 @@ class AuthService {
     try {
       print('🔍 [SERVICE] Buscando usuário por email: $email');
 
-      final querySnapshot = await FirebaseFirestore.instance
+      final querySnapshot = await _firestore
           .collection(AppConstants.usersCollection)
           .where('email', isEqualTo: email.toLowerCase())
           .limit(1)
@@ -49,34 +286,12 @@ class AuthService {
     }
   }
 
-  Future<T> _executeWithRetry<T>(
-    Future<T> Function() operation, {
-    int maxRetries = 3,
-    Duration delay = const Duration(seconds: 1),
-  }) async {
-    for (int attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        return await operation();
-      } catch (e) {
-        if (attempt == maxRetries) rethrow;
-
-        LoggerService.warning(
-          'RETRY',
-          'Tentativa $attempt falhou, tentando novamente em ${delay.inSeconds}s',
-        );
-        await Future.delayed(delay * attempt); // Backoff exponencial
-      }
-    }
-    throw Exception('Todas as tentativas falharam');
-  }
-
   // Login com email e senha
   Future<Usuario?> signInWithEmailAndPassword(
     String email,
     String password,
   ) async {
     return await _executeWithRetry(() async {
-      // Verifica rate limiting
       if (_isAccountLocked(email)) {
         throw FirebaseAuthException(
           code: 'too-many-requests',
@@ -97,7 +312,6 @@ class AuthService {
         );
 
         if (userCredential.user != null) {
-          // Busca os dados completos do usuário no Firestore
           Usuario? usuario = await _firestoreService.getUserById(
             userCredential.user!.uid,
           );
@@ -106,16 +320,7 @@ class AuthService {
             print(
               '⚠️ [SERVICE] Usuário não encontrado no Firestore, criando perfil padrão...',
             );
-            // Se não existe no Firestore, cria um usuário com perfil padrão
             usuario = await _criarUsuarioPadrao(userCredential.user!);
-
-            if (usuario == null) {
-              print(
-                '❌ [SERVICE] Falha crítica: não foi possível criar usuário padrão',
-              );
-              // Mesmo se falhar, retorna um usuário básico
-              usuario = _criarUsuarioBasico(userCredential.user!);
-            }
           } else {
             print(
               '✅ [SERVICE] Usuário encontrado no Firestore: ${usuario.nome}',
@@ -125,10 +330,8 @@ class AuthService {
           return usuario;
         }
 
-        print('❌ [SERVICE] userCredential.user é null');
         return null;
       } on FirebaseAuthException catch (e) {
-        // Incrementa tentativas falhas
         _recordFailedAttempt(email);
         print('❌ [SERVICE] FirebaseAuthException: ${e.code} - ${e.message}');
         rethrow;
@@ -139,6 +342,24 @@ class AuthService {
     });
   }
 
+  // ... (MANTENHA OS OUTROS MÉTODOS EXISTENTES - login, logout, etc.)
+
+  Future<T> _executeWithRetry<T>(
+    Future<T> Function() operation, {
+    int maxRetries = 3,
+    Duration delay = const Duration(seconds: 1),
+  }) async {
+    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await operation();
+      } catch (e) {
+        if (attempt == maxRetries) rethrow;
+        await Future.delayed(delay * attempt);
+      }
+    }
+    throw Exception('Todas as tentativas falharam');
+  }
+
   bool _isAccountLocked(String email) {
     final attempts = _loginAttempts[email] ?? 0;
     return attempts >= MAX_LOGIN_ATTEMPTS;
@@ -146,17 +367,12 @@ class AuthService {
 
   void _recordFailedAttempt(String email) {
     _loginAttempts[email] = (_loginAttempts[email] ?? 0) + 1;
-
-    // Reseta após o tempo de lockout
     Future.delayed(LOCKOUT_DURATION, () {
       _loginAttempts.remove(email);
     });
   }
 
-  // Método fallback para criar usuário básico
-  // Método fallback para criar usuário básico
   Usuario _criarUsuarioBasico(User user) {
-    // Gerar ID único mesmo para o perfil básico
     final perfilId = FirebaseFirestore.instance.collection('perfis').doc().id;
 
     return Usuario(
@@ -164,7 +380,7 @@ class AuthService {
       nome: user.email?.split('@').first ?? 'Usuário',
       email: user.email!,
       perfil: PerfilUsuario(
-        id: perfilId, // Usar ID gerado
+        id: perfilId,
         nome: "Usuário",
         descricao: "Perfil básico",
         permissoes: [PermissaoUsuario.visualizarCadastro],
@@ -178,17 +394,12 @@ class AuthService {
     );
   }
 
-  // Criar usuário padrão no Firestore
-  // Criar usuário padrão no Firestore
   Future<Usuario> _criarUsuarioPadrao(User user) async {
     try {
-      print('👤 [SERVICE] Criando usuário padrão para: ${user.uid}');
-
-      // Gerar ID único para o perfil
       final perfilId = FirebaseFirestore.instance.collection('perfis').doc().id;
 
       PerfilUsuario perfilPadrao = PerfilUsuario(
-        id: perfilId, // Usar o ID gerado
+        id: perfilId,
         nome: "Usuário",
         descricao: "Perfil de usuário padrão",
         permissoes: [
@@ -210,40 +421,26 @@ class AuthService {
         isAdmin: false,
       );
 
-      print('💾 [SERVICE] Salvando usuário no Firestore...');
       await _firestoreService.saveUser(novoUsuario);
-
-      // Salvar o perfil na coleção de perfis
       await _salvarPerfilNaColecao(perfilPadrao);
 
-      print(
-        '✅ [SERVICE] Usuário e perfil salvos com sucesso: ${novoUsuario.nome}',
-      );
       return novoUsuario;
     } catch (e) {
-      print('❌ [SERVICE] Erro ao criar usuário padrão: $e');
       return _criarUsuarioBasico(user);
     }
   }
 
-  // Método para salvar perfil na coleção de perfis
   Future<void> _salvarPerfilNaColecao(PerfilUsuario perfil) async {
     try {
-      await FirebaseFirestore.instance
-          .collection(
-            AppConstants.profilesCollection,
-          ) // Certifique-se de ter esta constante
+      await _firestore
+          .collection(AppConstants.profilesCollection)
           .doc(perfil.id)
           .set(perfil.toMap());
-
-      print('✅ [SERVICE] Perfil salvo na coleção: ${perfil.id}');
     } catch (e) {
-      print('❌ [SERVICE] Erro ao salvar perfil na coleção: $e');
       throw e;
     }
   }
 
-  // Cadastro de novo usuário
   // Cadastro de novo usuário
   Future<Usuario?> signUpWithEmailAndPassword(
     String email,
@@ -251,27 +448,20 @@ class AuthService {
     String nome,
   ) async {
     try {
-      print('👤 [SERVICE] Tentando cadastrar: $email - $nome');
-
       UserCredential userCredential = await _auth
           .createUserWithEmailAndPassword(
             email: email.trim(),
             password: password,
           );
 
-      print(
-        '✅ [SERVICE] Cadastro bem-sucedido para: ${userCredential.user!.uid}',
-      );
-
       if (userCredential.user != null) {
-        // Gerar ID único para o perfil
         final perfilId = FirebaseFirestore.instance
             .collection('perfis')
             .doc()
             .id;
 
         PerfilUsuario perfilPadrao = PerfilUsuario(
-          id: perfilId, // Usar o ID gerado
+          id: perfilId,
           nome: "Usuário",
           descricao: "Perfil de usuário padrão",
           permissoes: [
@@ -294,21 +484,15 @@ class AuthService {
         );
 
         await _firestoreService.saveUser(novoUsuario);
-        // Salvar o perfil na coleção de perfis
         await _salvarPerfilNaColecao(perfilPadrao);
 
-        print(
-          '✅ [SERVICE] Usuário e perfil salvos no Firestore: ${novoUsuario.id}',
-        );
         return novoUsuario;
       }
 
       return null;
     } on FirebaseAuthException catch (e) {
-      print('❌ [SERVICE] Erro no cadastro: ${e.code} - ${e.message}');
       rethrow;
     } catch (e) {
-      print('❌ [SERVICE] Erro inesperado no cadastro: $e');
       rethrow;
     }
   }
@@ -317,11 +501,7 @@ class AuthService {
   Future<void> sendPasswordResetEmail(String email) async {
     try {
       await _auth.sendPasswordResetEmail(email: email.trim());
-      print('✅ [SERVICE] Email de recuperação enviado para: $email');
     } on FirebaseAuthException catch (e) {
-      print(
-        '❌ [SERVICE] Erro ao enviar email de recuperação: ${e.code} - ${e.message}',
-      );
       rethrow;
     }
   }
@@ -329,16 +509,13 @@ class AuthService {
   // Logout
   Future<void> signOut() async {
     await _auth.signOut();
-    print('✅ [SERVICE] Usuário deslogado');
   }
 
   // Buscar usuário por ID
   Future<Usuario?> getUserById(String userId) async {
     try {
-      print('🔍 [SERVICE] Buscando usuário por ID: $userId');
       return await _firestoreService.getUserById(userId);
     } catch (e) {
-      print('❌ [SERVICE] Erro ao buscar usuário por ID: $e');
       return null;
     }
   }
@@ -348,13 +525,10 @@ class AuthService {
     try {
       final user = _auth.currentUser;
       if (user != null) {
-        print('👤 [SERVICE] Usuário atual encontrado: ${user.uid}');
         return await getUserById(user.uid);
       }
-      print('ℹ️ [SERVICE] Nenhum usuário logado atualmente');
       return null;
     } catch (e) {
-      print('❌ [SERVICE] Erro ao obter usuário atual: $e');
       return null;
     }
   }
@@ -365,12 +539,10 @@ class AuthService {
       final user = _auth.currentUser;
       if (user != null) {
         await user.updatePassword(newPassword);
-        print('✅ [SERVICE] Senha alterada com sucesso');
       } else {
         throw Exception('Usuário não está autenticado');
       }
     } on FirebaseAuthException catch (e) {
-      print('❌ [SERVICE] Erro ao alterar senha: ${e.code} - ${e.message}');
       rethrow;
     }
   }
@@ -385,7 +557,6 @@ class AuthService {
       }
       return false;
     } catch (e) {
-      print('❌ [SERVICE] Erro ao verificar email: $e');
       return false;
     }
   }
@@ -396,14 +567,10 @@ class AuthService {
       final user = _auth.currentUser;
       if (user != null) {
         await user.sendEmailVerification();
-        print('✅ [SERVICE] Email de verificação enviado');
       } else {
         throw Exception('Usuário não está autenticado');
       }
     } on FirebaseAuthException catch (e) {
-      print(
-        '❌ [SERVICE] Erro ao enviar email de verificação: ${e.code} - ${e.message}',
-      );
       rethrow;
     }
   }
@@ -412,28 +579,7 @@ class AuthService {
   Future<void> updateUserProfile(Usuario usuario) async {
     try {
       await _firestoreService.saveUser(usuario);
-      print('✅ [SERVICE] Perfil do usuário atualizado: ${usuario.nome}');
     } catch (e) {
-      print('❌ [SERVICE] Erro ao atualizar perfil: $e');
-      rethrow;
-    }
-  }
-
-  // Deletar conta do usuário
-  Future<void> deleteUserAccount() async {
-    try {
-      final user = _auth.currentUser;
-      if (user != null) {
-        // Primeiro deleta do Firestore
-        await _firestoreService.deleteUser(user.uid);
-        // Depois deleta do Auth
-        await user.delete();
-        print('✅ [SERVICE] Conta do usuário deletada com sucesso');
-      } else {
-        throw Exception('Usuário não está autenticado');
-      }
-    } on FirebaseAuthException catch (e) {
-      print('❌ [SERVICE] Erro ao deletar conta: ${e.code} - ${e.message}');
       rethrow;
     }
   }
@@ -451,14 +597,58 @@ class AuthService {
     });
   }
 
-  // Limpar tentativas de login (para testes)
-  static void clearLoginAttempts() {
-    _loginAttempts.clear();
-    print('🧹 [SERVICE] Tentativas de login limpas');
+  // Resetar senha de usuário (envia email de reset)
+  Future<void> resetarSenhaUsuario(String email) async {
+    try {
+      print('🔄 [SERVICE] Resetando senha para: $email');
+      await _auth.sendPasswordResetEmail(email: email.trim());
+      print('✅ [SERVICE] Email de reset enviado para: $email');
+    } on FirebaseAuthException catch (e) {
+      print('❌ [SERVICE] Erro ao resetar senha: ${e.code} - ${e.message}');
+      rethrow;
+    }
   }
 
-  // Obter estatísticas de rate limiting (para debug)
-  static Map<String, int> get loginAttemptsStats {
-    return Map.from(_loginAttempts);
+  // Verificar se usuário tem senha definida
+  Future<bool> usuarioTemSenhaDefinida(String userId) async {
+    try {
+      final doc = await _firestore
+          .collection(AppConstants.usersCollection)
+          .doc(userId)
+          .get();
+
+      if (doc.exists) {
+        final data = doc.data() as Map<String, dynamic>;
+        return data['temSenhaDefinida'] ?? false;
+      }
+      return false;
+    } catch (e) {
+      print('❌ [SERVICE] Erro ao verificar senha: $e');
+      return false;
+    }
+  }
+
+  // Enviar email de convite para definir senha (para novos usuários)
+  Future<void> enviarConviteSenha(String email) async {
+    try {
+      final actionCodeSettings = ActionCodeSettings(
+        url: 'https://seudominio.com/definir-senha',
+        handleCodeInApp: true,
+        iOSBundleId: 'com.seuapp.ios',
+        androidPackageName: 'com.seuapp.android',
+        androidInstallApp: true,
+        androidMinimumVersion: '12',
+      );
+
+      await _auth.sendSignInLinkToEmail(
+        email: email,
+        actionCodeSettings: actionCodeSettings,
+      );
+
+      print('✅ [SERVICE] Convite de senha enviado para: $email');
+    } on FirebaseAuthException catch (e) {
+      print('❌ [SERVICE] Erro ao enviar convite: ${e.code} - ${e.message}');
+      rethrow;
+    }
   }
 }
