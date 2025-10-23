@@ -2,7 +2,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:projeto_padrao/controllers/base/base_controller.dart';
+import 'package:projeto_padrao/core/constants/app_constants.dart';
 import 'package:projeto_padrao/models/perfil_usuario.dart';
+import 'package:projeto_padrao/models/paginated_response.dart';
 import 'package:projeto_padrao/services/perfil/perfil_service.dart';
 
 class PerfilController extends BaseController<PerfilUsuario> {
@@ -12,12 +14,13 @@ class PerfilController extends BaseController<PerfilUsuario> {
   int _currentPage = 0;
   int _totalItems = 0;
   bool _hasMoreItems = true;
-  final int _itemsPerPage = 20;
+  final int _itemsPerPage = AppConstants.itemsPerPageProfile;
   DocumentSnapshot? _lastDocument;
 
   List<PerfilUsuario> get perfisAtivos => _perfisAtivos;
   int get totalItems => _totalItems;
   bool get hasMoreItems => _hasMoreItems;
+  DocumentSnapshot? get lastDocument => _lastDocument;
 
   PerfilController() {
     loadItems();
@@ -39,25 +42,63 @@ class PerfilController extends BaseController<PerfilUsuario> {
     try {
       setLoading(true);
 
-      final lista = await _service.getPerfis(
-        page: _currentPage + 1,
-        limit: _itemsPerPage,
-        lastDocument: _lastDocument,
-      );
+      // ✅ USANDO PAGINAÇÃO COM CURSOR (MAIS EFICIENTE)
+      final PaginatedResponse<PerfilUsuario> response = await _service
+          .searchPerfisWithCursor(
+            limit: _itemsPerPage,
+            lastDocument: _lastDocument,
+          );
 
       if (reset) {
-        items = lista;
+        items = response.items;
       } else {
-        items.addAll(lista);
+        items.addAll(response.items);
       }
 
       _currentPage++;
+      _lastDocument = response.lastDocument;
+      _hasMoreItems = response.hasNextPage;
+
       _updatePerfisAtivos();
 
-      // ✅ CORREÇÃO: Atualiza o total de itens sem usar !
+      // ✅ ATUALIZA CONTAGEM TOTAL
       await _updateTotalCount();
+    } catch (e) {
+      print('Erro ao carregar perfis: $e');
+    } finally {
+      setLoading(false);
+    }
+  }
 
-      _hasMoreItems = lista.length == _itemsPerPage;
+  // ✅ ALTERNATIVA: Método com paginação numérica (se preferir)
+  Future<void> loadItemsWithNumericPagination({bool reset = false}) async {
+    if (reset) {
+      _currentPage = 0;
+      items = [];
+      _perfisAtivos = [];
+      _hasMoreItems = true;
+      _totalItems = 0;
+    }
+
+    if (isLoading || !_hasMoreItems) return;
+
+    try {
+      setLoading(true);
+
+      final PaginatedResponse<PerfilUsuario> response = await _service
+          .searchPerfis(page: _currentPage + 1, pageSize: _itemsPerPage);
+
+      if (reset) {
+        items = response.items;
+      } else {
+        items.addAll(response.items);
+      }
+
+      _currentPage = response.currentPage;
+      _totalItems = response.totalItems;
+      _hasMoreItems = response.hasNextPage;
+
+      _updatePerfisAtivos();
     } catch (e) {
       print('Erro ao carregar perfis: $e');
     } finally {
@@ -67,7 +108,7 @@ class PerfilController extends BaseController<PerfilUsuario> {
 
   Future<void> _updateTotalCount() async {
     try {
-      _totalItems = await _service.getTotalPerfis(); // ✅ Agora é int, não int?
+      _totalItems = await _service.getTotalPerfis();
     } catch (e) {
       print('Erro ao contar perfis: $e');
       _totalItems = items.length;
@@ -86,7 +127,7 @@ class PerfilController extends BaseController<PerfilUsuario> {
       setLoading(true);
       await _service.savePerfil(perfil);
 
-      // ✅ CORREÇÃO: Recarrega a lista completa para garantir consistência
+      // ✅ RECARREGA A LISTA COMPLETA PARA GARANTIR CONSISTÊNCIA
       await loadItems(reset: true);
 
       return true;
@@ -104,7 +145,7 @@ class PerfilController extends BaseController<PerfilUsuario> {
       setLoading(true);
       await _service.deletePerfil(perfil.id);
 
-      // ✅ CORREÇÃO: Recarrega a lista completa para garantir consistência
+      // ✅ RECARREGA A LISTA COMPLETA PARA GARANTIR CONSISTÊNCIA
       await loadItems(reset: true);
 
       return true;
@@ -116,12 +157,12 @@ class PerfilController extends BaseController<PerfilUsuario> {
     }
   }
 
-  // ✅ ADICIONE: Método específico para salvar (usado no form)
+  // ✅ MÉTODO ESPECÍFICO PARA SALVAR (USADO NO FORM)
   Future<bool> savePerfil(PerfilUsuario perfil) async {
     return await saveItem(perfil);
   }
 
-  // Métodos específicos do PerfilController
+  // ✅ MÉTODOS ESPECÍFICOS DO PERFILCONTROLLER
   void _updatePerfisAtivos() {
     _perfisAtivos = items.where((perfil) => perfil.ativo).toList();
     notifyListeners();
@@ -145,7 +186,7 @@ class PerfilController extends BaseController<PerfilUsuario> {
     }).toList();
   }
 
-  // Método para resetar a lista
+  // ✅ MÉTODO PARA RESETAR A LISTA
   void reset() {
     _currentPage = 0;
     items = [];
@@ -156,7 +197,7 @@ class PerfilController extends BaseController<PerfilUsuario> {
     notifyListeners();
   }
 
-  // Método para carregar perfis ativos (para dropdowns)
+  // ✅ MÉTODO PARA CARREGAR PERFIS ATIVOS (PARA DROPDOWNS)
   Future<void> loadPerfisAtivos() async {
     try {
       setLoading(true);
@@ -170,12 +211,38 @@ class PerfilController extends BaseController<PerfilUsuario> {
     }
   }
 
-  // ✅ ADICIONE: Método para obter perfil por ID
+  // ✅ MÉTODO PARA OBTER PERFIL POR ID
   PerfilUsuario? getPerfilById(String id) {
     try {
       return items.firstWhere((perfil) => perfil.id == id);
     } catch (e) {
       return null;
+    }
+  }
+
+  // ✅ NOVO: BUSCA AVANÇADA COM FILTROS
+  Future<PaginatedResponse<PerfilUsuario>> searchPerfisAvancado({
+    String searchTerm = '',
+    int page = 1,
+    int pageSize = 20,
+    bool apenasAtivos = false,
+  }) async {
+    try {
+      return await _service.searchPerfis(
+        searchTerm: searchTerm,
+        page: page,
+        pageSize: pageSize,
+        apenasAtivos: apenasAtivos,
+      );
+    } catch (e) {
+      print('Erro na busca avançada: $e');
+      return PaginatedResponse<PerfilUsuario>(
+        items: [],
+        currentPage: page,
+        totalPages: 0,
+        totalItems: 0,
+        hasNextPage: false,
+      );
     }
   }
 }

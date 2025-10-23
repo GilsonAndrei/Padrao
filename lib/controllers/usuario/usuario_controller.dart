@@ -15,7 +15,7 @@ class UsuarioController with ChangeNotifier {
   int _currentPage = 0;
   int _totalItems = 0;
   bool _hasMoreItems = true;
-  final int _itemsPerPage = 20;
+  final int _itemsPerPage = AppConstants.itemsPerPageUser;
   DocumentSnapshot? _lastDocument;
 
   List<Usuario> get items => _items;

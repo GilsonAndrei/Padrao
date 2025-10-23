@@ -30,6 +30,10 @@ class AppConstants {
 
   static const int MAX_LOGIN_ATTEMPTS = 5;
   static const Duration LOCKOUT_DURATION = Duration(minutes: 15);
+
+  //Paginação
+  static const itemsPerPageProfile = 2;
+  static const itemsPerPageUser = 2;
 }
 
 class AppStrings {
