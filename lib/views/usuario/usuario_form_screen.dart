@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:projeto_padrao/controllers/perfil/perfil_controller.dart';
+import 'package:projeto_padrao/controllers/perfil/perfil_search_controller.dart';
 import 'package:projeto_padrao/controllers/usuario/usuario_controller.dart';
 import 'package:projeto_padrao/core/themes/app_theme.dart';
+import 'package:projeto_padrao/services/perfil/perfil_service.dart';
+import 'package:projeto_padrao/views/search/generic_search_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:projeto_padrao/models/usuario.dart';
 import 'package:projeto_padrao/models/perfil_usuario.dart';
@@ -33,6 +36,7 @@ class _UsuarioFormScreenState extends State<UsuarioFormScreen> {
   bool _ativo = true;
   bool _emailVerificado = false;
   bool _isSubmitting = false;
+  bool _loadingPerfil = false;
 
   @override
   void initState() {
@@ -46,6 +50,12 @@ class _UsuarioFormScreenState extends State<UsuarioFormScreen> {
     _ativo = widget.usuario?.ativo ?? true;
     _emailVerificado = widget.usuario?.emailVerificado ?? false;
 
+    // ✅ CORREÇÃO: Carregar perfil se estiver editando
+    if (widget.usuario?.perfil != null &&
+        widget.usuario!.perfil.id.isNotEmpty) {
+      _carregarPerfilUsuario();
+    }
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final perfilController = Provider.of<PerfilController>(
         context,
@@ -55,6 +65,34 @@ class _UsuarioFormScreenState extends State<UsuarioFormScreen> {
         perfilController.loadItems();
       }
     });
+  }
+
+  // ✅ NOVO MÉTODO: Carregar perfil do usuário
+  Future<void> _carregarPerfilUsuario() async {
+    if (widget.usuario?.perfil == null) return;
+
+    setState(() {
+      _loadingPerfil = true;
+    });
+
+    try {
+      final perfilService = PerfilService();
+      final perfilCompleto = await perfilService.getPerfilById(
+        widget.usuario!.perfil.id,
+      );
+
+      if (perfilCompleto != null) {
+        setState(() {
+          _perfilSelecionado = perfilCompleto;
+        });
+      }
+    } catch (e) {
+      print('Erro ao carregar perfil: $e');
+    } finally {
+      setState(() {
+        _loadingPerfil = false;
+      });
+    }
   }
 
   @override
@@ -184,16 +222,19 @@ class _UsuarioFormScreenState extends State<UsuarioFormScreen> {
     UsuarioController usuarioController,
     PerfilController perfilController,
   ) {
-    return Column(
-      children: [
-        _buildUserPhotoSection(),
-        const SizedBox(height: 24),
-        _buildBasicInfoSection(),
-        const SizedBox(height: 24),
-        _buildSettingsSection(perfilController),
-        const SizedBox(height: 32),
-        _buildActionButtons(context, usuarioController),
-      ],
+    return Form(
+      key: _formKey,
+      child: Column(
+        children: [
+          _buildUserPhotoSection(),
+          const SizedBox(height: 24),
+          _buildBasicInfoSection(),
+          const SizedBox(height: 24),
+          _buildSettingsSection(perfilController),
+          const SizedBox(height: 32),
+          _buildActionButtons(context, usuarioController),
+        ],
+      ),
     );
   }
 
@@ -202,14 +243,17 @@ class _UsuarioFormScreenState extends State<UsuarioFormScreen> {
     UsuarioController usuarioController,
     PerfilController perfilController,
   ) {
-    return Column(
-      children: [
-        _buildBasicInfoSection(),
-        const SizedBox(height: 24),
-        _buildSettingsSection(perfilController),
-        const SizedBox(height: 32),
-        _buildActionButtons(context, usuarioController),
-      ],
+    return Form(
+      key: _formKey,
+      child: Column(
+        children: [
+          _buildBasicInfoSection(),
+          const SizedBox(height: 24),
+          _buildSettingsSection(perfilController),
+          const SizedBox(height: 32),
+          _buildActionButtons(context, usuarioController),
+        ],
+      ),
     );
   }
 
@@ -478,180 +522,189 @@ class _UsuarioFormScreenState extends State<UsuarioFormScreen> {
   }
 
   Widget _buildPerfilDropdown(PerfilController perfilController) {
-    return Consumer<PerfilController>(
-      builder: (context, controller, child) {
-        if (controller.isLoading) {
-          return _buildLoadingPerfis();
-        }
-
-        if (controller.perfisAtivos.isEmpty) {
-          return _buildNoPerfisAvailable();
-        }
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Perfil de Acesso',
-              style: TextStyle(
-                fontWeight: FontWeight.w500,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<PerfilUsuario>(
-              value: _getInitialPerfilValue(controller),
-              decoration: InputDecoration(
-                hintText: 'Selecione um perfil',
-                prefixIcon: Icon(
-                  Icons.manage_accounts,
-                  color: AppColors.primary,
-                ),
-                filled: true,
-                fillColor: AppColors.background,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: AppColors.border),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: AppColors.primary, width: 2),
-                ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-              ),
-              items: controller.perfisAtivos.map((perfil) {
-                return DropdownMenuItem<PerfilUsuario>(
-                  value: perfil,
-                  child: Text(
-                    perfil.nome,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.textPrimary,
-                      fontSize: 14,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                );
-              }).toList(),
-              onChanged: (PerfilUsuario? perfil) {
-                setState(() {
-                  _perfilSelecionado = perfil;
-                });
-              },
-              validator: (value) {
-                if (value == null) {
-                  return 'Por favor, selecione um perfil';
-                }
-                return null;
-              },
-              isExpanded: true,
-            ),
-            if (_perfilSelecionado != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                _perfilSelecionado!.descricao,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: AppColors.textSecondary,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-            ],
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildLoadingPerfis() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.background,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 20,
-            height: 20,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: AppColors.primary,
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Perfil de Acesso *',
+          style: TextStyle(
+            fontWeight: FontWeight.w500,
+            color: AppColors.textPrimary,
           ),
-          const SizedBox(width: 12),
-          Text(
-            'Carregando perfis...',
-            style: TextStyle(color: AppColors.textSecondary),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNoPerfisAvailable() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.warning.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.warning.withOpacity(0.3)),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.warning_amber, color: AppColors.warning),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        ),
+        const SizedBox(height: 8),
+        GestureDetector(
+          onTap: () => _showPerfilSearch(context),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: _perfilSelecionado == null
+                    ? AppColors.error.withOpacity(0.5)
+                    : AppColors.border,
+                width: _perfilSelecionado == null ? 1.5 : 1,
+              ),
+            ),
+            child: Row(
               children: [
-                Text(
-                  'Nenhum perfil disponível',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.textPrimary,
-                  ),
+                Icon(
+                  Icons.manage_accounts,
+                  color: _perfilSelecionado == null
+                      ? AppColors.error
+                      : AppColors.primary,
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  'Crie um perfil ativo antes de cadastrar usuários',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
-                  ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _loadingPerfil
+                      ? _buildLoadingPerfil()
+                      : _perfilSelecionado == null
+                      ? Text(
+                          'Selecione um perfil',
+                          style: TextStyle(color: AppColors.textSecondary),
+                        )
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _perfilSelecionado!.nome,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            if (_perfilSelecionado!.descricao.isNotEmpty)
+                              Text(
+                                _perfilSelecionado!.descricao,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                          ],
+                        ),
                 ),
+                Icon(Icons.arrow_drop_down, color: AppColors.textSecondary),
               ],
             ),
           ),
+        ),
+        if (_perfilSelecionado == null && !_loadingPerfil) ...[
+          const SizedBox(height: 4),
+          Text(
+            'Por favor, selecione um perfil',
+            style: TextStyle(color: AppColors.error, fontSize: 12),
+          ),
         ],
-      ),
+      ],
     );
   }
 
-  PerfilUsuario? _getInitialPerfilValue(PerfilController controller) {
-    if (_perfilSelecionado != null) {
-      try {
-        return controller.perfisAtivos.firstWhere(
-          (p) => p.id == _perfilSelecionado!.id,
-        );
-      } catch (e) {}
-    }
+  Widget _buildLoadingPerfil() {
+    return Row(
+      children: [
+        SizedBox(
+          width: 16,
+          height: 16,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: AppColors.primary,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          'Carregando perfil...',
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+        ),
+      ],
+    );
+  }
 
-    if (widget.usuario != null) {
-      try {
-        return controller.perfisAtivos.firstWhere(
-          (p) => p.id == widget.usuario!.perfil.id,
-        );
-      } catch (e) {}
-    }
+  // No método _showPerfilSearch do UsuarioFormScreen
+  void _showPerfilSearch(BuildContext context) {
+    final controller = PerfilSearchController(
+      PerfilService(),
+      apenasAtivos: true,
+    );
 
-    return null;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          height: MediaQuery.of(context).size.height * 0.8,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: GenericSearchScreen<PerfilUsuario>(
+            controller: controller,
+            title: 'Selecionar Perfil', // ✅ Agora o título é usado
+            searchHint: 'Buscar por nome ou descrição...',
+            enableSelection: true,
+            isModal: true,
+            showAppBar: false, // ✅ CORREÇÃO: Não mostra o AppBar nativo
+            itemBuilder: (perfil) => Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    perfil.nome,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                    ),
+                  ),
+                  if (perfil.descricao.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      perfil.descricao,
+                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                    ),
+                  ],
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: perfil.ativo
+                              ? Colors.green[50]
+                              : Colors.red[50],
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: perfil.ativo ? Colors.green : Colors.red,
+                          ),
+                        ),
+                        child: Text(
+                          perfil.ativo ? 'Ativo' : 'Inativo',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: perfil.ativo ? Colors.green : Colors.red,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            onItemSelected: (perfil) {
+              setState(() {
+                _perfilSelecionado = perfil;
+              });
+            },
+          ),
+        );
+      },
+    );
   }
 
   Widget _buildStatusSwitch() {

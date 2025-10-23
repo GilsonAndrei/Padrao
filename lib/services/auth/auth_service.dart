@@ -154,13 +154,17 @@ class AuthService {
   }
 
   // Método fallback para criar usuário básico
+  // Método fallback para criar usuário básico
   Usuario _criarUsuarioBasico(User user) {
+    // Gerar ID único mesmo para o perfil básico
+    final perfilId = FirebaseFirestore.instance.collection('perfis').doc().id;
+
     return Usuario(
       id: user.uid,
       nome: user.email?.split('@').first ?? 'Usuário',
       email: user.email!,
       perfil: PerfilUsuario(
-        id: "perfil_basico",
+        id: perfilId, // Usar ID gerado
         nome: "Usuário",
         descricao: "Perfil básico",
         permissoes: [PermissaoUsuario.visualizarCadastro],
@@ -175,12 +179,16 @@ class AuthService {
   }
 
   // Criar usuário padrão no Firestore
+  // Criar usuário padrão no Firestore
   Future<Usuario> _criarUsuarioPadrao(User user) async {
     try {
       print('👤 [SERVICE] Criando usuário padrão para: ${user.uid}');
 
+      // Gerar ID único para o perfil
+      final perfilId = FirebaseFirestore.instance.collection('perfis').doc().id;
+
       PerfilUsuario perfilPadrao = PerfilUsuario(
-        id: "perfil_usuario_padrao",
+        id: perfilId, // Usar o ID gerado
         nome: "Usuário",
         descricao: "Perfil de usuário padrão",
         permissoes: [
@@ -204,16 +212,38 @@ class AuthService {
 
       print('💾 [SERVICE] Salvando usuário no Firestore...');
       await _firestoreService.saveUser(novoUsuario);
-      print('✅ [SERVICE] Usuário salvo com sucesso: ${novoUsuario.nome}');
 
+      // Salvar o perfil na coleção de perfis
+      await _salvarPerfilNaColecao(perfilPadrao);
+
+      print(
+        '✅ [SERVICE] Usuário e perfil salvos com sucesso: ${novoUsuario.nome}',
+      );
       return novoUsuario;
     } catch (e) {
       print('❌ [SERVICE] Erro ao criar usuário padrão: $e');
-      // Retorna um usuário básico mesmo se falhar ao salvar no Firestore
       return _criarUsuarioBasico(user);
     }
   }
 
+  // Método para salvar perfil na coleção de perfis
+  Future<void> _salvarPerfilNaColecao(PerfilUsuario perfil) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection(
+            AppConstants.profilesCollection,
+          ) // Certifique-se de ter esta constante
+          .doc(perfil.id)
+          .set(perfil.toMap());
+
+      print('✅ [SERVICE] Perfil salvo na coleção: ${perfil.id}');
+    } catch (e) {
+      print('❌ [SERVICE] Erro ao salvar perfil na coleção: $e');
+      throw e;
+    }
+  }
+
+  // Cadastro de novo usuário
   // Cadastro de novo usuário
   Future<Usuario?> signUpWithEmailAndPassword(
     String email,
@@ -234,8 +264,14 @@ class AuthService {
       );
 
       if (userCredential.user != null) {
+        // Gerar ID único para o perfil
+        final perfilId = FirebaseFirestore.instance
+            .collection('perfis')
+            .doc()
+            .id;
+
         PerfilUsuario perfilPadrao = PerfilUsuario(
-          id: "perfil_usuario_padrao",
+          id: perfilId, // Usar o ID gerado
           nome: "Usuário",
           descricao: "Perfil de usuário padrão",
           permissoes: [
@@ -253,15 +289,20 @@ class AuthService {
           perfil: perfilPadrao,
           dataCriacao: DateTime.now(),
           ativo: true,
-          emailVerificado: false,
           isAdmin: false,
+          emailVerificado: false,
         );
 
         await _firestoreService.saveUser(novoUsuario);
-        print('✅ [SERVICE] Usuário salvo no Firestore: ${novoUsuario.id}');
+        // Salvar o perfil na coleção de perfis
+        await _salvarPerfilNaColecao(perfilPadrao);
 
+        print(
+          '✅ [SERVICE] Usuário e perfil salvos no Firestore: ${novoUsuario.id}',
+        );
         return novoUsuario;
       }
+
       return null;
     } on FirebaseAuthException catch (e) {
       print('❌ [SERVICE] Erro no cadastro: ${e.code} - ${e.message}');

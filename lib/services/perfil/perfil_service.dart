@@ -1,27 +1,163 @@
 // services/perfil/perfil_service.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:projeto_padrao/core/constants/app_constants.dart';
+import 'package:projeto_padrao/models/paginated_response.dart';
 import 'package:projeto_padrao/models/perfil_usuario.dart';
 import 'package:projeto_padrao/enums/permissao_usuario.dart';
 
 class PerfilService {
   final CollectionReference _perfisCollection = FirebaseFirestore.instance
-      .collection(AppConstants.permissionsCollection);
+      .collection(AppConstants.profilesCollection);
 
+  // ✅ MÉTODO PARA BUSCA PAGINADA GENÉRICA
+  Future<PaginatedResponse<PerfilUsuario>> searchPerfis({
+    required String searchTerm,
+    required int page,
+    int pageSize = 20,
+  }) async {
+    try {
+      // ✅ CORREÇÃO: Garantir que o pageSize seja sempre positivo
+      final effectiveLimit = pageSize > 0 ? pageSize : 20;
+      final startIndex = (page - 1) * effectiveLimit;
+
+      Query query = _perfisCollection.orderBy('nome').limit(effectiveLimit);
+
+      // Aplicar filtro de busca se houver termo
+      if (searchTerm.isNotEmpty) {
+        query = _perfisCollection
+            .where('nome', isGreaterThanOrEqualTo: searchTerm)
+            .where('nome', isLessThan: searchTerm + 'z')
+            .orderBy('nome')
+            .limit(effectiveLimit);
+      }
+
+      // Para paginação além da primeira página
+      if (startIndex > 0) {
+        // Precisamos buscar os documentos anteriores para usar startAfter
+        final previousPageQuery = _perfisCollection
+            .orderBy('nome')
+            .limit(startIndex);
+
+        final previousSnapshot = await previousPageQuery.get();
+        if (previousSnapshot.docs.isNotEmpty) {
+          final lastDoc = previousSnapshot.docs.last;
+          query = query.startAfterDocument(lastDoc);
+        }
+      }
+
+      final querySnapshot = await query.get();
+
+      // Buscar o total de documentos para calcular paginação
+      final totalQuery = searchTerm.isEmpty
+          ? _perfisCollection
+          : _perfisCollection
+                .where('nome', isGreaterThanOrEqualTo: searchTerm)
+                .where('nome', isLessThan: searchTerm + 'z');
+
+      final totalSnapshot = await totalQuery.count().get();
+      final totalItems = totalSnapshot.count ?? 0;
+      final totalPages = (totalItems / effectiveLimit).ceil();
+
+      final items = querySnapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return _perfilFromFirestore(doc.id, data);
+      }).toList();
+
+      return PaginatedResponse<PerfilUsuario>(
+        items: items,
+        currentPage: page,
+        totalPages: totalPages,
+        totalItems: totalItems,
+        hasNextPage: page < totalPages,
+      );
+    } catch (e) {
+      throw Exception('Erro ao buscar perfis: $e');
+    }
+  }
+
+  // ✅ MÉTODO ALTERNATIVO: Busca apenas perfis ativos com paginação
+  Future<PaginatedResponse<PerfilUsuario>> searchPerfisAtivos({
+    required String searchTerm,
+    required int page,
+    int pageSize = 20,
+  }) async {
+    try {
+      final effectiveLimit = pageSize > 0 ? pageSize : 20;
+      final startIndex = (page - 1) * effectiveLimit;
+
+      Query query = _perfisCollection
+          .where('ativo', isEqualTo: true)
+          .orderBy('nome')
+          .limit(effectiveLimit);
+
+      // Aplicar filtro de busca se houver termo
+      if (searchTerm.isNotEmpty) {
+        query = _perfisCollection
+            .where('ativo', isEqualTo: true)
+            .where('nome', isGreaterThanOrEqualTo: searchTerm)
+            .where('nome', isLessThan: searchTerm + 'z')
+            .orderBy('nome')
+            .limit(effectiveLimit);
+      }
+
+      // Para paginação além da primeira página
+      if (startIndex > 0) {
+        final previousPageQuery = _perfisCollection
+            .where('ativo', isEqualTo: true)
+            .orderBy('nome')
+            .limit(startIndex);
+
+        final previousSnapshot = await previousPageQuery.get();
+        if (previousSnapshot.docs.isNotEmpty) {
+          final lastDoc = previousSnapshot.docs.last;
+          query = query.startAfterDocument(lastDoc);
+        }
+      }
+
+      final querySnapshot = await query.get();
+
+      // Buscar o total de documentos ativos
+      final totalQuery = searchTerm.isEmpty
+          ? _perfisCollection.where('ativo', isEqualTo: true)
+          : _perfisCollection
+                .where('ativo', isEqualTo: true)
+                .where('nome', isGreaterThanOrEqualTo: searchTerm)
+                .where('nome', isLessThan: searchTerm + 'z');
+
+      final totalSnapshot = await totalQuery.count().get();
+      final totalItems = totalSnapshot.count ?? 0;
+      final totalPages = (totalItems / effectiveLimit).ceil();
+
+      final items = querySnapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return _perfilFromFirestore(doc.id, data);
+      }).toList();
+
+      return PaginatedResponse<PerfilUsuario>(
+        items: items,
+        currentPage: page,
+        totalPages: totalPages,
+        totalItems: totalItems,
+        hasNextPage: page < totalPages,
+      );
+    } catch (e) {
+      throw Exception('Erro ao buscar perfis ativos: $e');
+    }
+  }
+
+  // ✅ MÉTODOS EXISTENTES (mantidos para compatibilidade)
   Future<List<PerfilUsuario>> getPerfis({
     int page = 1,
     int limit = 20,
     DocumentSnapshot? lastDocument,
   }) async {
     try {
-      // ✅ CORREÇÃO: Garantir que o limite seja sempre positivo
       final effectiveLimit = limit > 0 ? limit : 20;
 
       Query query = _perfisCollection
           .orderBy('dataCriacao', descending: true)
           .limit(effectiveLimit);
 
-      // Para paginação, usa o último documento carregado
       if (lastDocument != null) {
         query = query.startAfterDocument(lastDocument);
       }
@@ -37,43 +173,13 @@ class PerfilService {
     }
   }
 
-  // ✅ CORREÇÃO: Método para contar o total de perfis com tratamento de null
   Future<int> getTotalPerfis() async {
     try {
       final countQuery = await _perfisCollection.count().get();
-      return countQuery.count ?? 0; // ✅ Usa ?? para fornecer valor padrão
+      return countQuery.count ?? 0;
     } catch (e) {
       print('Erro ao contar perfis: $e');
-      return 0; // ✅ Retorna 0 em caso de erro
-    }
-  }
-
-  // Método para buscar perfis com filtro (para search)
-  Future<List<PerfilUsuario>> searchPerfis({
-    required String searchTerm,
-    int limit = 20,
-  }) async {
-    try {
-      // ✅ CORREÇÃO: Garantir que o limite seja sempre positivo
-      final effectiveLimit = limit > 0 ? limit : 20;
-
-      if (searchTerm.isEmpty) {
-        return getPerfis(limit: effectiveLimit);
-      }
-
-      final querySnapshot = await _perfisCollection
-          .where('nome', isGreaterThanOrEqualTo: searchTerm)
-          .where('nome', isLessThan: searchTerm + 'z')
-          .orderBy('nome')
-          .limit(effectiveLimit)
-          .get();
-
-      return querySnapshot.docs.map((doc) {
-        final data = doc.data() as Map<String, dynamic>;
-        return _perfilFromFirestore(doc.id, data);
-      }).toList();
-    } catch (e) {
-      throw Exception('Erro ao buscar perfis: $e');
+      return 0;
     }
   }
 
@@ -82,7 +188,6 @@ class PerfilService {
       final perfilData = _perfilToFirestore(perfil);
 
       if (perfil.id.isEmpty || perfil.id == 'null') {
-        // Novo perfil
         final docRef = _perfisCollection.doc();
         await docRef.set({
           ...perfilData,
@@ -90,7 +195,6 @@ class PerfilService {
           'dataAtualizacao': FieldValue.serverTimestamp(),
         });
       } else {
-        // Perfil existente
         if (perfil.id.isNotEmpty && perfil.id != 'null') {
           await _perfisCollection.doc(perfil.id).update({
             ...perfilData,
@@ -116,7 +220,6 @@ class PerfilService {
     }
   }
 
-  // Buscar perfil por ID
   Future<PerfilUsuario?> getPerfilById(String id) async {
     try {
       final doc = await _perfisCollection.doc(id).get();
@@ -130,13 +233,11 @@ class PerfilService {
     }
   }
 
-  // Buscar perfis ativos com paginação
   Future<List<PerfilUsuario>> getPerfisAtivos({
     int limit = 20,
     DocumentSnapshot? lastDocument,
   }) async {
     try {
-      // ✅ CORREÇÃO: Garantir que o limite seja sempre positivo
       final effectiveLimit = limit > 0 ? limit : 20;
 
       Query query = _perfisCollection
@@ -159,21 +260,20 @@ class PerfilService {
     }
   }
 
-  // ✅ CORREÇÃO: Contar perfis ativos com tratamento de null
   Future<int> getTotalPerfisAtivos() async {
     try {
       final countQuery = await _perfisCollection
           .where('ativo', isEqualTo: true)
           .count()
           .get();
-      return countQuery.count ?? 0; // ✅ Usa ?? para fornecer valor padrão
+      return countQuery.count ?? 0;
     } catch (e) {
       print('Erro ao contar perfis ativos: $e');
-      return 0; // ✅ Retorna 0 em caso de erro
+      return 0;
     }
   }
 
-  // ✅ CONVERTE Firestore para PerfilUsuario
+  // ✅ MÉTODOS DE CONVERSÃO
   PerfilUsuario _perfilFromFirestore(String docId, Map<String, dynamic> data) {
     return PerfilUsuario(
       id: docId,
@@ -186,7 +286,6 @@ class PerfilService {
     );
   }
 
-  // ✅ CONVERTE PerfilUsuario para Firestore
   Map<String, dynamic> _perfilToFirestore(PerfilUsuario perfil) {
     return {
       'nome': perfil.nome,
@@ -196,7 +295,6 @@ class PerfilService {
     };
   }
 
-  // ✅ CONVERTE Timestamp para DateTime
   DateTime _timestampToDateTime(dynamic timestamp) {
     if (timestamp == null) return DateTime.now();
     if (timestamp is Timestamp) {
@@ -208,7 +306,6 @@ class PerfilService {
     return DateTime.now();
   }
 
-  // ✅ CORRIGIDO: Conversão de permissões com tipo correto
   List<PermissaoUsuario> _parsePermissoes(dynamic permissoes) {
     final List<PermissaoUsuario> result = [];
 
@@ -224,7 +321,6 @@ class PerfilService {
     return result;
   }
 
-  // ✅ CORRIGIDO: Conversão de string para PermissaoUsuario
   PermissaoUsuario? _permissaoFromString(String codigo) {
     try {
       return PermissaoUsuario.values.firstWhere((e) => e.codigo == codigo);

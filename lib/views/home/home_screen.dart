@@ -66,13 +66,50 @@ class _HomePageState extends State<HomePage> {
         ),
         actions: [_buildUserMenu(authController)],
       ),
-      body: ResponsiveLayout(
-        mobile: _buildMobileBody(authController),
-        tablet: _buildTabletBody(authController),
-        desktop: _buildDesktopBody(authController),
-      ),
+      body: _buildResponsiveBody(authController),
       floatingActionButton: _buildFloatingActionButton(authController),
       drawer: _buildDrawer(authController),
+    );
+  }
+
+  // ✅ NOVO MÉTODO: Body responsivo com scroll
+  Widget _buildResponsiveBody(AuthController authController) {
+    return ResponsiveLayout(
+      mobile: _buildMobileBody(authController),
+      tablet: _buildTabletBody(authController),
+      desktop: _buildDesktopBody(authController),
+    );
+  }
+
+  // ✅ MOBILE COM SCROLL
+  Widget _buildMobileBody(AuthController authController) {
+    return SingleChildScrollView(
+      physics: AlwaysScrollableScrollPhysics(),
+      padding: EdgeInsets.only(bottom: 20),
+      child: _buildBodyContent(authController),
+    );
+  }
+
+  // ✅ TABLET COM SCROLL
+  Widget _buildTabletBody(AuthController authController) {
+    return SingleChildScrollView(
+      physics: AlwaysScrollableScrollPhysics(),
+      padding: EdgeInsets.all(24),
+      child: _buildBodyContent(authController),
+    );
+  }
+
+  // ✅ DESKTOP COM SCROLL
+  Widget _buildDesktopBody(AuthController authController) {
+    return SingleChildScrollView(
+      physics: AlwaysScrollableScrollPhysics(),
+      padding: EdgeInsets.all(32),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: 1200),
+          child: _buildBodyContent(authController),
+        ),
+      ),
     );
   }
 
@@ -266,128 +303,129 @@ class _HomePageState extends State<HomePage> {
             ],
           ),
         ),
-        child: ListView(
-          // ✅ CORREÇÃO: Removido o parâmetro 'child' do ListView
-          padding: EdgeInsets.zero,
-          children: [
-            // ✅ HEADER DO DRAWER PREMIUM
-            Container(
-              padding: EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    AppColors.primary.withOpacity(0.9),
-                    AppColors.secondary.withOpacity(0.8),
-                  ],
+        child: SafeArea(
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              // ✅ HEADER DO DRAWER PREMIUM
+              Container(
+                padding: EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      AppColors.primary.withOpacity(0.9),
+                      AppColors.secondary.withOpacity(0.8),
+                    ],
+                  ),
                 ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  CircleAvatar(
-                    radius: _getResponsiveValue(
-                      mobile: 25,
-                      tablet: 30,
-                      desktop: 35,
-                    ),
-                    backgroundColor: Colors.white.withOpacity(0.2),
-                    child: Icon(
-                      Icons.person,
-                      size: _getResponsiveValue(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CircleAvatar(
+                      radius: _getResponsiveValue(
                         mobile: 25,
                         tablet: 30,
                         desktop: 35,
                       ),
-                      color: Colors.white,
-                    ),
-                  ),
-                  SizedBox(height: 16),
-                  Text(
-                    usuario?.nome ?? 'Usuário',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: _getResponsiveValue(
-                        mobile: 16,
-                        tablet: 18,
-                        desktop: 20,
-                      ),
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    usuario?.email ?? '',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: _getResponsiveValue(
-                        mobile: 12,
-                        tablet: 14,
-                        desktop: 14,
+                      backgroundColor: Colors.white.withOpacity(0.2),
+                      child: Icon(
+                        Icons.person,
+                        size: _getResponsiveValue(
+                          mobile: 25,
+                          tablet: 30,
+                          desktop: 35,
+                        ),
+                        color: Colors.white,
                       ),
                     ),
-                  ),
-                  SizedBox(height: 8),
-                  Container(
-                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Text(
-                      usuario?.perfil.nome ?? 'Perfil',
+                    SizedBox(height: 16),
+                    Text(
+                      usuario?.nome ?? 'Usuário',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: _getResponsiveValue(
-                          mobile: 10,
-                          tablet: 12,
-                          desktop: 12,
+                          mobile: 16,
+                          tablet: 18,
+                          desktop: 20,
                         ),
-                        fontWeight: FontWeight.w500,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                  ),
-                ],
+                    SizedBox(height: 4),
+                    Text(
+                      usuario?.email ?? '',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: _getResponsiveValue(
+                          mobile: 12,
+                          tablet: 14,
+                          desktop: 14,
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 8),
+                    Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Text(
+                        usuario?.perfil.nome ?? 'Perfil',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: _getResponsiveValue(
+                            mobile: 10,
+                            tablet: 12,
+                            desktop: 12,
+                          ),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
 
-            // ... resto do código do drawer permanece igual
-            // ✅ SEÇÃO: GESTÃO DO SISTEMA (APENAS ADMIN)
-            AdminOnlyWidget(
-              usuario: usuario,
-              child: _buildDrawerSection(
-                title: 'GESTÃO DO SISTEMA',
-                icon: Icons.admin_panel_settings,
-                children: [
-                  _buildDrawerItem(
-                    icon: Icons.people_alt_rounded,
-                    title: 'Gerenciar Usuários',
-                    subtitle: 'Cadastrar e editar usuários',
-                    onTap: () {
-                      Navigator.pop(context);
-                      AppPages.navigateTo(context, AppRoutes.users);
-                    },
-                    badge: 'Admin',
-                    badgeColor: AppColors.success,
-                  ),
-                  _buildDrawerItem(
-                    icon: Icons.manage_accounts_rounded,
-                    title: 'Gerenciar Perfis',
-                    subtitle: 'Configurar perfis e permissões',
-                    onTap: () {
-                      Navigator.pop(context);
-                      AppPages.navigateTo(context, AppRoutes.profiles);
-                    },
-                    badge: 'Admin',
-                    badgeColor: AppColors.success,
-                  ),
-                ],
+              // ✅ SEÇÃO: GESTÃO DO SISTEMA (APENAS ADMIN)
+              AdminOnlyWidget(
+                usuario: usuario,
+                child: _buildDrawerSection(
+                  title: 'GESTÃO DO SISTEMA',
+                  icon: Icons.admin_panel_settings,
+                  children: [
+                    _buildDrawerItem(
+                      icon: Icons.people_alt_rounded,
+                      title: 'Gerenciar Usuários',
+                      subtitle: 'Cadastrar e editar usuários',
+                      onTap: () {
+                        Navigator.pop(context);
+                        AppPages.navigateTo(context, AppRoutes.users);
+                      },
+                      badge: 'Admin',
+                      badgeColor: AppColors.success,
+                    ),
+                    _buildDrawerItem(
+                      icon: Icons.manage_accounts_rounded,
+                      title: 'Gerenciar Perfis',
+                      subtitle: 'Configurar perfis e permissões',
+                      onTap: () {
+                        Navigator.pop(context);
+                        AppPages.navigateTo(context, AppRoutes.profiles);
+                      },
+                      badge: 'Admin',
+                      badgeColor: AppColors.success,
+                    ),
+                  ],
+                ),
               ),
-            ),
-
-            // ... continue com as outras seções do drawer
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -509,30 +547,6 @@ class _HomePageState extends State<HomePage> {
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-
-  // ✅ BODY RESPONSIVO
-  Widget _buildMobileBody(AuthController authController) {
-    return _buildBodyContent(authController);
-  }
-
-  Widget _buildTabletBody(AuthController authController) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(24),
-      child: _buildBodyContent(authController),
-    );
-  }
-
-  Widget _buildDesktopBody(AuthController authController) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(32),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: 1200),
-          child: _buildBodyContent(authController),
         ),
       ),
     );
@@ -1318,7 +1332,14 @@ class _HomePageState extends State<HomePage> {
       builder: (context) => Dialog(
         backgroundColor: AppColors.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: Padding(
+        child: Container(
+          constraints: BoxConstraints(
+            maxWidth: _getResponsiveValue(
+              mobile: MediaQuery.of(context).size.width * 0.8,
+              tablet: 400,
+              desktop: 450,
+            ),
+          ),
           padding: EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1340,57 +1361,187 @@ class _HomePageState extends State<HomePage> {
               Text(
                 'Confirmar Saída',
                 style: TextStyle(
-                  fontSize: 18,
+                  fontSize: _getResponsiveValue(
+                    mobile: 18,
+                    tablet: 20,
+                    desktop: 22,
+                  ),
                   fontWeight: FontWeight.bold,
                   color: AppColors.textPrimary,
                 ),
               ),
-              SizedBox(height: 8),
+              SizedBox(height: 12),
               Text(
                 'Tem certeza que deseja sair do sistema?',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textSecondary),
+                style: TextStyle(
+                  fontSize: _getResponsiveValue(
+                    mobile: 14,
+                    tablet: 15,
+                    desktop: 16,
+                  ),
+                  color: AppColors.textSecondary,
+                ),
               ),
               SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.textSecondary,
-                        padding: EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: Text('Cancelar'),
-                    ),
-                  ),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () async {
-                        Navigator.pop(context);
-                        await authController.logout();
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.error,
-                        foregroundColor: Colors.white,
-                        padding: EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: Text('Sair'),
-                    ),
-                  ),
-                ],
+              ResponsiveLayout(
+                mobile: _buildLogoutButtonsMobile(),
+                tablet: _buildLogoutButtonsTablet(),
+                desktop: _buildLogoutButtonsDesktop(),
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildLogoutButtonsMobile() {
+    return Column(
+      children: [
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton(
+            onPressed: () => Navigator.pop(context),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.textSecondary,
+              padding: EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              side: BorderSide(color: AppColors.border),
+            ),
+            child: Text(
+              'Cancelar',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+        SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await Provider.of<AuthController>(
+                context,
+                listen: false,
+              ).logout();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+              padding: EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 2,
+            ),
+            child: Text(
+              'Sair do Sistema',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLogoutButtonsTablet() {
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton(
+            onPressed: () => Navigator.pop(context),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.textSecondary,
+              padding: EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              side: BorderSide(color: AppColors.border),
+            ),
+            child: Text(
+              'Cancelar',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+        SizedBox(width: 16),
+        Expanded(
+          child: ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await Provider.of<AuthController>(
+                context,
+                listen: false,
+              ).logout();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+              padding: EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 2,
+            ),
+            child: Text(
+              'Sair',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLogoutButtonsDesktop() {
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton(
+            onPressed: () => Navigator.pop(context),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.textSecondary,
+              padding: EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              side: BorderSide(color: AppColors.border),
+            ),
+            child: Text(
+              'Cancelar',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+        SizedBox(width: 16),
+        Expanded(
+          child: ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await Provider.of<AuthController>(
+                context,
+                listen: false,
+              ).logout();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+              padding: EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 2,
+            ),
+            child: Text(
+              'Sair do Sistema',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -22,6 +22,7 @@ class _PerfilFormScreenState extends State<PerfilFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nomeFocusNode = FocusNode();
   final _descricaoFocusNode = FocusNode();
+  final _permissoesSectionKey = GlobalKey();
 
   late TextEditingController _nomeController;
   late TextEditingController _descricaoController;
@@ -148,32 +149,38 @@ class _PerfilFormScreenState extends State<PerfilFormScreen> {
   }
 
   Widget _buildFormContent(BuildContext context, PerfilController controller) {
-    return Column(
-      children: [
-        _buildPerfilIconSection(),
-        const SizedBox(height: 24),
-        _buildBasicInfoSection(),
-        const SizedBox(height: 24),
-        _buildSettingsSection(),
-        const SizedBox(height: 24),
-        _buildPermissoesSection(),
-        const SizedBox(height: 32),
-        _buildActionButtons(context, controller),
-      ],
+    return Form(
+      key: _formKey,
+      child: Column(
+        children: [
+          _buildPerfilIconSection(),
+          const SizedBox(height: 24),
+          _buildBasicInfoSection(),
+          const SizedBox(height: 24),
+          _buildSettingsSection(),
+          const SizedBox(height: 24),
+          _buildPermissoesSection(),
+          const SizedBox(height: 32),
+          _buildActionButtons(context, controller),
+        ],
+      ),
     );
   }
 
   Widget _buildFormFields(BuildContext context, PerfilController controller) {
-    return Column(
-      children: [
-        _buildBasicInfoSection(),
-        const SizedBox(height: 24),
-        _buildSettingsSection(),
-        const SizedBox(height: 24),
-        _buildPermissoesSection(),
-        const SizedBox(height: 32),
-        _buildActionButtons(context, controller),
-      ],
+    return Form(
+      key: _formKey,
+      child: Column(
+        children: [
+          _buildBasicInfoSection(),
+          const SizedBox(height: 24),
+          _buildSettingsSection(),
+          const SizedBox(height: 24),
+          _buildPermissoesSection(),
+          const SizedBox(height: 32),
+          _buildActionButtons(context, controller),
+        ],
+      ),
     );
   }
 
@@ -465,6 +472,7 @@ class _PerfilFormScreenState extends State<PerfilFormScreen> {
 
   Widget _buildPermissoesSection() {
     return Card(
+      key: _permissoesSectionKey,
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
@@ -997,13 +1005,29 @@ class _PerfilFormScreenState extends State<PerfilFormScreen> {
   }
 
   bool _validarFormulario() {
-    if (!_formKey.currentState!.validate()) {
+    // Valida o formulário primeiro para mostrar os erros visuais
+    final isFormValid = _formKey.currentState?.validate() ?? false;
+
+    if (!isFormValid) {
       _showValidationError('Por favor, corrija os erros no formulário');
       return false;
     }
 
     if (_permissoesSelecionadas.isEmpty) {
       _showValidationError('Selecione pelo menos uma permissão para o perfil');
+
+      // Rola para a seção de permissões
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final context = _permissoesSectionKey.currentContext;
+        if (context != null) {
+          Scrollable.ensureVisible(
+            context,
+            duration: const Duration(milliseconds: 500),
+            curve: Curves.easeInOut,
+          );
+        }
+      });
+
       return false;
     }
 
